@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    body {
+        @apply bg-white text-gray-900 font-sans antialiased;
+    }
+}
+@keyframes ringPulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+.ring-pulse-1 {
+    animation: ringPulse 2s infinite;
+}
+
+.ring-pulse-2 {
+    animation: ringPulse 2s infinite 0.8s;
+}
+
+.shadow-violet-glow-lg {
+    box-shadow:
+        0 0 15px rgba(139, 92, 246, .4),
+        0 0 30px rgba(139, 92, 246, .25);
+}

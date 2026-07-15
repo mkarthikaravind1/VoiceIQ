@@ -1,0 +1,142 @@
+[
+  {
+    "id": "faq_001",
+    "question": "What is your return policy?",
+    "answer": "We accept returns within 30 days of purchase. Items must be unused and in original packaging. To initiate a return, contact support@voiceiq.com with your order number."
+  },
+  {
+    "id": "faq_002",
+    "question": "How long does shipping take?",
+    "answer": "Standard shipping takes 5-7 business days. Express shipping takes 2-3 business days. International orders may take 10-15 business days depending on the destination."
+  },
+  {
+    "id": "faq_003",
+    "question": "Do you offer free shipping?",
+    "answer": "Yes! Orders over $50 qualify for free standard shipping within the US. Express shipping always has a fee of $12.99 regardless of order value."
+  },
+  {
+    "id": "faq_004",
+    "question": "How can I track my order?",
+    "answer": "Once your order ships, you will receive a tracking email with a link. You can also say 'check my order' followed by your order number to get a real-time status update."
+  },
+  {
+    "id": "faq_005",
+    "question": "What payment methods do you accept?",
+    "answer": "We accept Visa, Mastercard, American Express, PayPal, and UPI. All transactions are secured with 256-bit SSL encryption."
+  },
+  {
+    "id": "faq_006",
+    "question": "Can I change or cancel my order?",
+    "answer": "Orders can be modified or cancelled within 1 hour of placement. After that, the order enters processing and cannot be changed. Please contact support immediately if you need to make changes."
+  },
+  {
+    "id": "faq_007",
+    "question": "Do you have a loyalty program?",
+    "answer": "Yes! Our VoicePoints program gives you 1 point per dollar spent. Every 100 points equals $1 off your next order. Points never expire and can be redeemed at checkout."
+  },
+  {
+    "id": "faq_008",
+    "question": "How do I contact customer support?",
+    "answer": "You can reach us via this voice agent 24/7, by email at support@voiceiq.com, or by phone at 1-800-VOICEIQ Monday through Friday, 9am to 6pm EST."
+  },
+  {
+    "id": "faq_009",
+    "question": "What is your exchange policy?",
+    "answer": "We offer exchanges within 30 days of purchase. Items must be unused and in original packaging. Contact support@voiceiq.com with your order number and the item you'd like to exchange for."
+  },
+  {
+    "id": "faq_010",
+    "question": "Are there any items that cannot be returned?",
+    "answer": "Yes, the following items are non-returnable: digital downloads, gift cards, perishable goods, personalized or custom-made items, and items marked as 'Final Sale' at the time of purchase."
+  },
+  {
+    "id": "faq_011",
+    "question": "How do I apply a discount or promo code?",
+    "answer": "Enter your promo code in the 'Discount Code' field at checkout and click 'Apply'. Only one promo code can be used per order. Codes cannot be combined with other offers unless stated otherwise."
+  },
+  {
+    "id": "faq_012",
+    "question": "What happens if my order arrives damaged?",
+    "answer": "If your item arrives damaged, take photos of the packaging and product, then email support@voiceiq.com within 48 hours of delivery. We will arrange a free replacement or full refund at your choice."
+  },
+  {
+    "id": "faq_013",
+    "question": "Can I place a bulk or wholesale order?",
+    "answer": "Yes, we offer bulk pricing for orders of 20 or more units. Email wholesale@voiceiq.com with your requirements and we will send you a custom quote within 2 business days."
+  },
+  {
+    "id": "faq_014",
+    "question": "Do you ship internationally?",
+    "answer": "Yes, we ship to over 50 countries. International shipping rates and delivery times vary by destination. Import duties and taxes are the responsibility of the buyer and are not included in our pricing."
+  },
+  {
+    "id": "faq_015",
+    "question": "How do I create an account?",
+    "answer": "Visit our website and click 'Sign Up' in the top right corner. Enter your name, email address, and a password. You will receive a verification email — click the link to activate your account."
+  },
+  {
+    "id": "faq_016",
+    "question": "I forgot my password. How do I reset it?",
+    "answer": "Click 'Forgot Password' on the login page and enter your registered email. You will receive a password reset link within 5 minutes. Check your spam folder if you don't see it in your inbox."
+  },
+  {
+    "id": "faq_017",
+    "question": "How do I update my shipping address?",
+    "answer": "Log in to your account, go to 'My Profile', and click 'Edit Address'. You can save multiple addresses and select a default one. Note that address changes do not apply to already-placed orders."
+  },
+  {
+    "id": "faq_018",
+    "question": "What is your product warranty?",
+    "answer": "All products come with a 1-year manufacturer's warranty covering defects in materials and workmanship. The warranty does not cover damage from misuse, accidents, or unauthorized modifications."
+  },
+  {
+    "id": "faq_019",
+    "question": "How do I redeem my VoicePoints?",
+    "answer": "At checkout, log in to your account and your available VoicePoints balance will appear. Select how many points you want to apply — every 100 points gives you $1 off. Partial point redemption is allowed."
+  },
+  {
+    "id": "faq_020",
+    "question": "Can I use VoicePoints on sale items?",
+    "answer": "Yes, VoicePoints can be redeemed on both regular and sale-priced items. However, points cannot be combined with promo codes unless the promotion explicitly states otherwise."
+  },
+  {
+    "id": "faq_021",
+    "question": "How do I check my VoicePoints balance?",
+    "answer": "Log in to your account and visit the 'Rewards' section in your dashboard to see your current VoicePoints balance, recent earning history, and available redemption options."
+  },
+  {
+    "id": "faq_022",
+    "question": "Do you offer gift wrapping?",
+    "answer": "Yes, gift wrapping is available for $4.99 per item. You can add a personalized message at no extra cost. Select 'Gift Wrap' on the product page or during checkout before placing your order."
+  },
+  {
+    "id": "faq_023",
+    "question": "Can I send an order as a gift directly to someone else?",
+    "answer": "Absolutely. Simply enter the recipient's address as the shipping address during checkout. You can also include a gift message and opt for gift wrapping. The invoice will not be included in the package."
+  },
+  {
+    "id": "faq_024",
+    "question": "What should I do if I receive the wrong item?",
+    "answer": "We apologize for the error. Email support@voiceiq.com with your order number and a photo of the wrong item received. We will arrange a free return pickup and send the correct item within 3 business days."
+  },
+  {
+    "id": "faq_025",
+    "question": "How do I unsubscribe from marketing emails?",
+    "answer": "Click 'Unsubscribe' at the bottom of any marketing email, or go to 'My Profile' > 'Notification Preferences' and toggle off promotional emails. You will still receive transactional emails about your orders."
+  },
+  {
+    "id": "faq_026",
+    "question": "Is my personal and payment information secure?",
+    "answer": "Yes. We use 256-bit SSL encryption for all transactions and never store your full card details on our servers. Our platform is PCI-DSS compliant and undergoes regular third-party security audits."
+  },
+  {
+    "id": "faq_027",
+    "question": "Can I save items to a wishlist?",
+    "answer": "Yes. Click the heart icon on any product page to save it to your wishlist. You must be logged in to use this feature. Wishlists can also be shared with friends and family via a unique link."
+  },
+  {
+    "id": "faq_028",
+    "question": "How do I leave a product review?",
+    "answer": "After your order is delivered, you will receive a review request email. You can also visit the product page, scroll to 'Customer Reviews', and click 'Write a Review'. You must have purchased the item to leave a verified review."
+  }
+]

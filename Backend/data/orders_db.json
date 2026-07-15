@@ -1,0 +1,42 @@
+{
+  "1001": {
+    "order_id": "1001",
+    "customer": "Rahul Sharma",
+    "status": "Delivered",
+    "items": ["Wireless Earbuds", "Phone Case"],
+    "total": 89.99,
+    "placed_on": "2024-06-10",
+    "delivered_on": "2024-06-15",
+    "tracking": "TRK1001XYZ"
+  },
+  "1002": {
+    "order_id": "1002",
+    "customer": "Priya Patel",
+    "status": "In Transit",
+    "items": ["Mechanical Keyboard"],
+    "total": 129.00,
+    "placed_on": "2024-06-18",
+    "estimated_delivery": "2024-06-22",
+    "tracking": "TRK1002ABC"
+  },
+  "1003": {
+    "order_id": "1003",
+    "customer": "Arjun Mehta",
+    "status": "Processing",
+    "items": ["USB-C Hub", "Laptop Stand", "Mouse Pad"],
+    "total": 74.50,
+    "placed_on": "2024-06-20",
+    "estimated_delivery": "2024-06-27",
+    "tracking": null
+  },
+  "1004": {
+    "order_id": "1004",
+    "customer": "Sneha Joshi",
+    "status": "Cancelled",
+    "items": ["Smart Watch"],
+    "total": 199.99,
+    "placed_on": "2024-06-15",
+    "cancelled_on": "2024-06-15",
+    "refund_status": "Refund processed in 3-5 business days"
+  }
+}

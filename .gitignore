@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# ChromaDB
+backend/data/chroma_db/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.env
+
+# Models (large files — download separately)
+backend/models/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+Notes for Running.txt
+websocket.txt
+Working.txt
+
+package-lock.json
+package.json
+postcss.config.js
+tailwind.config.js
+vite.config.js
