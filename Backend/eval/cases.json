@@ -1,0 +1,16 @@
+[
+  { "id": "faq_returns",     "text": "What is your return policy?",                     "intent": "faq",          "tool": "search_faq", "faq_id": "faq_001" },
+  { "id": "faq_shipping",    "text": "How long does shipping take?",                    "intent": "faq",          "tool": "search_faq", "faq_id": "faq_002" },
+  { "id": "faq_payment",     "text": "Which payment methods do you accept?",            "intent": "faq",          "tool": "search_faq", "faq_id": "faq_005" },
+  { "id": "faq_warranty",    "text": "Is there a warranty on your products?",           "intent": "faq",          "tool": "search_faq", "faq_id": "faq_018" },
+  { "id": "faq_damaged",     "text": "My package arrived damaged, what should I do?",   "intent": "faq",          "tool": "search_faq", "faq_id": "faq_012" },
+  { "id": "faq_intl",        "text": "Do you ship to other countries?",                 "intent": "faq",          "tool": "search_faq", "faq_id": "faq_014" },
+  { "id": "order_digits",    "text": "Where is my order one zero zero two?",            "intent": "order_lookup", "order_id": "1002" },
+  { "id": "order_thousand",  "text": "Can you check order one thousand and three?",     "intent": "order_lookup", "order_id": "1003" },
+  { "id": "order_track",     "text": "I want to track order number one zero zero one.", "intent": "order_lookup", "order_id": "1001" },
+  { "id": "action_cancel",   "text": "Please cancel order one zero zero five.",         "intent": "order_action", "order_id": "1005" },
+  { "id": "action_return",   "text": "I would like to return order one zero zero one.", "intent": "order_action", "order_id": "1001" },
+  { "id": "escalate_human",  "text": "I want to talk to a human agent.",                "intent": "escalate" },
+  { "id": "escalate_person", "text": "Can I speak to a real person please?",            "intent": "escalate" },
+  { "id": "smalltalk_bye",   "text": "Thank you very much, goodbye.",                   "intent": "smalltalk" }
+]

@@ -1,6 +1,7 @@
 """
 STT Pipeline using Faster-Whisper.
-Accepts raw PCM audio bytes, returns transcription text.
+Accepts raw PCM audio bytes, returns the transcript plus prosody features
+(loudness, pitch) of the same audio.
 Runs in a thread pool to avoid blocking the async event loop.
 """
 
@@ -8,11 +9,15 @@ import asyncio
 import numpy as np
 from faster_whisper import WhisperModel
 from app.config import get_settings
+from app.stt.prosody import extract_prosody
 from app.stt.vad import get_vad
 
 settings = get_settings()
 
 SAMPLE_RATE = 16000
+
+_NO_SPEECH = {"transcript": "", "language": "en", "language_probability": 0.0,
+              "confidence": 0.0, "is_speech": False, "prosody": {}}
 
 
 class STTPipeline:
@@ -31,16 +36,16 @@ class STTPipeline:
         self.vad = get_vad()
         print("✅ Faster-Whisper ready")
 
-    def _transcribe_sync(self, audio_bytes: bytes) -> dict:
+    def _transcribe_sync(self, audio_bytes: bytes, language: str | None) -> dict:
         """
         Synchronous transcription — runs in thread pool.
-        Returns dict with transcript text, language, and confidence.
+        language: ISO code to force, or None to let Whisper detect it.
         """
         # Step 1: VAD — extract only speech portions
         assert self.vad is not None
         speech_bytes = self.vad.extract_speech(audio_bytes)
         if speech_bytes is None:
-            return {"transcript": "", "language": "en", "confidence": 0.0, "is_speech": False}
+            return dict(_NO_SPEECH)
 
         # Step 2: Convert PCM bytes → float32 numpy array for Whisper
         audio_np = np.frombuffer(speech_bytes, dtype=np.float32)
@@ -50,12 +55,11 @@ class STTPipeline:
         segments, info = self.model.transcribe(
             audio_np,
             beam_size=5,
-            language=settings.whisper_language or None,   # "" → auto-detect
+            language=language or None,
             vad_filter=False,     # we already ran VAD above
             word_timestamps=False,
         )
 
-        # Collect all segment texts
         # Skip segments Whisper itself thinks are not speech (this is where
         # "Thank you." hallucinations on background noise come from)
         transcript_parts = [
@@ -65,31 +69,26 @@ class STTPipeline:
         ]
         transcript = " ".join(p for p in transcript_parts if p).strip()
 
-        # Filter out noise — too short or no real words
         # One-word answers like "Yes" or "No" are valid and kept
         if len(transcript) < 2:
-            return {"transcript": "", "language": "en", "confidence": 0.0, "is_speech": False}
-
-        # Faster-Whisper gives avg log prob per segment; convert to 0-1 confidence
-        #confidence = min(1.0, max(0.0, info.transcription_options.beam_size / 10))     
-        confidence = round(info.language_probability, 3)
+            return dict(_NO_SPEECH)
 
         return {
             "transcript": transcript,
             "language": info.language,
             "language_probability": round(info.language_probability, 3),
-            "confidence": confidence,
+            "confidence": round(info.language_probability, 3),
             "is_speech": True,
+            "prosody": extract_prosody(audio_np, transcript),
         }
 
-    async def transcribe(self, audio_bytes: bytes) -> dict:
+    async def transcribe(self, audio_bytes: bytes, language: str | None = None) -> dict:
         """
         Async wrapper — offloads CPU-heavy transcription to thread pool
         so the FastAPI event loop stays unblocked.
         """
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(None, self._transcribe_sync, audio_bytes)
-        return result
+        return await loop.run_in_executor(None, self._transcribe_sync, audio_bytes, language)
 
 
 # Singleton

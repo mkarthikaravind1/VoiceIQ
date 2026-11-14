@@ -1,27 +1,31 @@
 """
-LangGraph agent state — shared across all nodes in the graph.
+LangGraph agent state — rebuilt for every turn and shared across the nodes.
+Anything that must outlive the turn lives in CallContext (context.py).
 """
-from typing import TypedDict, Optional, Any
+from typing import TypedDict, Optional
 
 
 class AgentState(TypedDict):
     # Input
-    transcript: str
-    language: str
+    transcript: str              # what the caller said, as transcribed
+    normalized: str              # same, with spoken numbers turned into digits
+    language: str                # language to reply in
+    arousal: float               # voice arousal for this utterance (-1..1), from prosody
 
-    # Intent detection
-    intent: str                  # "faq" | "order_lookup" | "escalate" | "unknown"
+    # Triage
+    intent: str                  # faq | order_lookup | order_action | escalate | smalltalk | unknown
     confidence: float            # 0.0 – 1.0
-    order_id: Optional[str]      # extracted if intent == order_lookup
+    confirmation: str            # yes | no | none — answer to a pending yes/no question
+    sentiment_text: float        # sentiment of the words alone (-1..1)
+    sentiment: float             # words + voice combined (-1..1)
 
-    # RAG / DB result
-    retrieved_context: str
+    # Result of a confirmed/declined action, passed to the agent as a note
+    action_note: str
 
-    # Final output
+    # Output
     response: str
     should_escalate: bool
-    summary: Optional[dict]    
-    _start_time: Optional[float]
-    sentiment_score: Optional[float]       # ← add: -1.0 (angry) to 1.0 (happy)
-    sentiment_history: Optional[list]      # ← add: scores across turns
-    conversation_history: list 
+    tools: list
+    summary: Optional[dict]
+    timings: dict
+    _start_time: float

@@ -1,39 +1,46 @@
 # VoiceIQ 🎙️
 
-> **Real-time voice AI customer service agent** — browser-based, with barge-in interruption, sentiment-based escalation, multi-turn memory, and RAG-powered FAQ retrieval.
+> **Real-time voice AI customer service agent** — talks, listens, looks up and changes orders, hands over to a human, and measures itself.
 
 ---
 
 ## 📌 Project Overview
 
-VoiceIQ is a full-stack real-time voice agent built for customer service automation. The user speaks into their browser; VoiceIQ transcribes the speech, runs it through an AI agent, and responds with synthesized voice — all over a single WebSocket connection, with no page reloads.
+VoiceIQ is a full-stack voice agent for customer service. A caller speaks in the browser (or on a phone line); VoiceIQ transcribes the speech, runs a tool-calling agent, and answers in a synthesized voice — over one WebSocket, sentence by sentence, while the model is still writing.
 
-Key differentiators over a basic chatbot:
-- **Natural turn-taking**: the agent waits until you stop speaking (voice activity detection), not for a fixed timer
-- **Barge-in**: start talking while the agent is speaking and it stops immediately
-- **Sentiment escalation**: detects frustrated users and auto-escalates to human support
-- **RAG/FAQ retrieval**: grounds responses in a knowledge base using vector search
-- **Multi-turn memory**: keeps recent conversation context for the whole call
-- **Order lookup**: understands spoken order numbers ("one zero zero two", "ten oh two")
+What makes it more than a voice chatbot:
+
+- **Streaming pipeline** — the first sentence is spoken while the LLM is still producing the rest, and every turn shows where its time went
+- **An agent that acts** — it cancels orders, starts returns and changes delivery addresses in a real database, after a spoken confirmation
+- **Caller verification** — nothing about an order is revealed or changed until the caller proves who they are
+- **Human handoff console** — a supervisor watches calls live, reads an AI-written briefing, takes over and speaks to the caller
+- **Multilingual** — English, Hindi and Tamil conversations over an English knowledge base
+- **Post-call analytics** — every call is stored, summarised and scored; unanswered questions become a "knowledge gaps" list
+- **Sentiment from the voice** — loudness and pitch are combined with the words, and plotted live
+- **Evaluation harness** — replays recorded utterances and reports word error rate, intent accuracy and retrieval hit rate
+- **Phone access** — the same pipeline answers a real phone number through Twilio
+- **One-command start** — `docker compose up`
 
 ---
 
 ## ✨ Features
 
-| Feature | Description |
+| Feature | How it works |
 |---|---|
-| 🎤 Real-time STT | Faster-Whisper transcribes each utterance once Silero VAD detects the speaker has stopped |
-| 🔊 Streaming TTS | Piper synthesizes the reply sentence by sentence, so audio starts before the full reply is ready |
-| ⚡ Barge-in | Speech detected during a reply cancels that turn on the server and stops playback in the browser |
-| 😠 Sentiment Escalation | Two consecutive turns below -0.5 sentiment trigger a human handoff alert |
-| 🔍 RAG / FAQ Retrieval | ChromaDB + SentenceTransformers retrieve relevant FAQs; unrelated questions get no context |
-| 🧠 Multi-turn Memory | The last 6 turns are passed to the LLM on every turn |
-| 📦 Order Lookup | Order status from a JSON order store, with spoken-number normalisation |
-| 🏷️ Entity Highlighting | Order numbers, emails and phone numbers are highlighted in the transcript |
-| 📋 Per-turn Summary | Each turn is tagged with intent, resolution, order ID and processing time |
+| 🎤 Turn-taking | Silero VAD ends a turn when the caller stops speaking — no fixed timer |
+| ⚡ Barge-in | Speech during a reply cancels that turn on the server and stops playback |
+| 🚀 Streaming replies | LLM tokens → sentence splitter → Piper TTS, each sentence sent as soon as it is ready |
+| ⏱️ Latency breakdown | Per turn: waiting for silence, speech-to-text, understanding, first sentence, voice synthesis |
+| 🛠️ Tool-calling agent | LangGraph agent with tools for FAQ search, order status, cancel, return, address change, escalation |
+| ✅ Spoken confirmation | Changes are parked until the caller says yes; the "yes" is checked in code, not left to the model |
+| 🔐 Caller verification | Last four digits of the phone number on the order; three failed attempts hand the call to a human |
+| 🧑‍💼 Supervisor console | Live calls, escalation queue, handoff briefing, takeover with typed replies spoken to the caller |
+| 🌐 Multilingual | Reply language per call; FAQ queries are translated to English by the agent before retrieval |
+| 📊 Analytics | Resolution rate, escalation rate, estimated satisfaction, time to first audio, knowledge gaps |
+| 😠 Voice sentiment | Pitch and loudness relative to the caller's own baseline, fused with text sentiment |
+| 🧪 Evaluation | `python -m eval.run_eval` — WER, intent, tool and retrieval accuracy on recorded audio |
+| ☎️ Phone bridge | Twilio Media Streams ⇄ the same call session (8 kHz mu-law ⇄ 16 kHz PCM) |
 | 🛟 Failure isolation | An LLM or TTS error fails one turn with a message; the call stays connected |
-
-Speech recognition is set to English by default, because the voice, prompts and knowledge base are English. Set `WHISPER_LANGUAGE=` (empty) in `.env` to let Whisper auto-detect the language.
 
 ---
 
@@ -43,21 +50,21 @@ Speech recognition is set to English by default, because the voice, prompts and 
 | Layer | Technology |
 |---|---|
 | API & WebSocket | FastAPI + Uvicorn |
-| Speech-to-Text | Faster-Whisper (CTranslate2-optimized Whisper, `base` model) |
-| Voice Activity Detection | Silero VAD (endpointing + barge-in detection) |
-| Text-to-Speech | Piper TTS (`en_US-lessac-medium`) |
-| Agent Orchestration | LangGraph (stateful multi-node graph) |
-| LLM | Groq API — `llama-3.1-8b-instant` |
-| Vector Store | ChromaDB (cosine similarity) |
-| Embeddings | SentenceTransformers (`all-MiniLM-L6-v2`) |
+| Speech-to-Text | Faster-Whisper (`base`) |
+| Voice Activity Detection | Silero VAD |
+| Text-to-Speech | Piper (`en_US-lessac-medium`, optional `hi_IN-pratham-medium`) |
+| Agent | LangGraph + LangChain tool calling |
+| LLM | Groq — `openai/gpt-oss-120b` (agent), `openai/gpt-oss-20b` (classification, summaries) |
+| Vector Store | ChromaDB + SentenceTransformers (`all-MiniLM-L6-v2`) |
+| Database | SQLite (orders, call history) |
+| Phone | Twilio Media Streams |
 
 ### Frontend
 | Layer | Technology |
 |---|---|
-| Framework | React 18 + Vite |
+| Framework | React 18 + Vite + React Router |
 | Styling | Tailwind CSS |
-| Mic capture | Web Audio API — AudioWorklet, downsampled to 16 kHz PCM |
-| Playback | Web Audio API (queued WAV chunks) |
+| Mic capture | AudioWorklet, downsampled to 16 kHz PCM |
 | Charts | Recharts |
 | Transport | Native WebSocket |
 
@@ -66,172 +73,214 @@ Speech recognition is set to English by default, because the voice, prompts and 
 ## 🏗️ Architecture
 
 ```
-Browser (React/Vite)
-        │
-        │  WebSocket /ws/voice
-        │  ├── Binary frames: raw PCM audio (int16, 16kHz, mono)
-        │  └── Text frames:   JSON control messages
-        │
-        ▼
-FastAPI WebSocket Handler (app/api/websocket.py)
-        │
-        ├── Receive loop: buffer audio, Silero VAD on the trailing 0.8s
-        │       ├── speech starts → cancel any running turn, send "barge_in"
-        │       └── speech ends   → start a turn (background asyncio task)
-        │
-        └── Turn task
-                ├── Faster-Whisper STT → transcript
-                ├── LangGraph Agent (app/agent/graph.py)
-                │       analyze_sentiment
-                │         ├─ frustrated twice → escalate
-                │         └─ detect_intent
-                │               ├─ faq          → faq_retrieve (ChromaDB) → generate_response
-                │               ├─ order_lookup → lookup_order            → generate_response
-                │               ├─ escalate     → escalate
-                │               └─ low confidence → fallback
-                │       generate_summary (every path)
-                └── Piper TTS → WAV chunk per sentence → browser
+Browser mic ──16 kHz PCM──►  /ws/voice  ─┐
+Phone (Twilio) ─8 kHz µ-law─► /ws/twilio ─┤
+                                          ▼
+                              CallSession (app/call/session.py)
+                              ├─ Silero VAD: start / end of speech, barge-in
+                              └─ Turn task
+                                  ├─ Faster-Whisper → transcript + prosody (pitch, loudness)
+                                  ├─ LangGraph agent (app/agent/)
+                                  │     triage ── sentiment + intent + yes/no  (fast model)
+                                  │       ├─ frustrated twice / asks for a person → escalate
+                                  │       ├─ an action awaits confirmation → resolve_pending ─┐
+                                  │       ├─ unintelligible → fallback                        │
+                                  │       └─ agent  ◄────────────────────────────────────────┘
+                                  │            streams sentences, calls tools:
+                                  │            search_faq · verify_customer · get_order_status
+                                  │            cancel_order · start_return · update_shipping_address
+                                  │            escalate_to_human
+                                  │     summarize
+                                  └─ Piper TTS worker: one sentence at a time → caller
+                              ├─ SQLite: orders, calls, turns, knowledge gaps
+                              └─ CallRegistry ──► /ws/supervisor (live board, takeover)
 ```
 
 ### How a turn works
 
-1. The browser streams 16 kHz PCM audio over WebSocket binary frames
-2. The server buffers audio and checks the trailing 0.8 seconds for speech with Silero VAD
-3. When the speaker stops (or after 15 seconds), the utterance is handed to a background task
-4. Faster-Whisper transcribes it; the transcript is sent to the browser
-5. The LangGraph agent scores sentiment, detects intent, retrieves FAQ or order data, and generates a reply
-6. The reply text and metadata are sent to the browser
-7. Piper synthesizes the reply sentence by sentence; each sentence is sent as a base64 WAV chunk
-8. If the user starts speaking at any point, the server cancels the turn and the browser stops playback
+1. Audio is buffered; Silero VAD checks the trailing 0.8 s for speech
+2. When the caller stops, the utterance becomes a background task (so new speech can interrupt it)
+3. Faster-Whisper transcribes it and prosody features are extracted from the same audio
+4. **Triage** (one fast LLM call) scores sentiment, labels the intent and reads a yes/no answer
+5. The **agent** streams its reply; each finished sentence goes straight to the TTS worker
+6. Tools run in between — an order change is only *parked*, and executes after the caller confirms
+7. The turn, its timings and any knowledge gap are stored; supervisors see the update live
 
-Every turn message carries a `turn_id`, so the browser can discard anything that belongs to an interrupted turn.
+### Safety rules built into the agent
+
+- Order details and changes require **verification** — enforced inside the tools, not just in the prompt
+- Every change needs a **spoken yes**; eligibility is re-checked when the change is applied
+- The agent is told never to claim an action unless a tool result starts with `DONE`
 
 ---
 
 ## 🚀 Setup & Installation
 
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
-- [Groq API key](https://console.groq.com/)
-
-### Backend
+### Option A — Docker
 
 ```bash
-# Clone the repo
 git clone https://github.com/mkarthikaravind1/VoiceIQ.git
-cd VoiceIQ/Backend
+cd VoiceIQ
+copy .env.example .env        # then add your GROQ_API_KEY
+docker compose up --build
+```
 
-# Create virtual environment
+Open `http://localhost:8080`. The first start downloads the speech models (about 300 MB) into a Docker volume.
+
+### Option B — Local
+
+Prerequisites: Python 3.10+, Node.js 18+, a [Groq API key](https://console.groq.com/).
+
+```bash
+cd VoiceIQ/Backend
 python -m venv venv
 venv\Scripts\activate        # Windows
 # source venv/bin/activate   # Mac/Linux
-
-# Install dependencies
 pip install -r requirements.txt
 
-# Set environment variables (.env lives in the repo root)
+# .env lives in the repo root
 copy ..\.env.example ..\.env
 # Edit .env and add your GROQ_API_KEY
 
-# Download the Piper voice model (~63 MB, not stored in git)
+# Piper voice (~63 MB, not stored in git)
 curl -L -o data/tts_models/en_US-lessac-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
 
-# Build the FAQ vector store (once, and again whenever knowledge_base.json changes)
+# Build the FAQ vector store (again whenever knowledge_base.json changes)
 python -m app.rag.ingest
 
-# Run the server
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Frontend
-
 ```bash
 cd VoiceIQ/Frontend
-
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173` in your browser. The dev server proxies `/ws`, `/api` and `/docs` to the backend on port 8000.
+Open `http://localhost:5173`. The sample order database is created on first start.
 
-> **Note:** Browser microphone access requires either `localhost` or an HTTPS origin. Use headphones when testing barge-in on loud speakers, so the agent does not hear its own voice.
+> Microphone access needs `localhost` or HTTPS. Use headphones when testing barge-in on loud speakers.
 
-### Environment Variables
+### Optional: Hindi voice
 
-Backend (`.env` in the repo root or in `Backend/`):
+Replies in Hindi work as text without it; with it they are spoken.
+
+```bash
+curl -L -o data/tts_models/hi_IN-pratham-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx
+curl -L -o data/tts_models/hi_IN-pratham-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx.json
+```
+
+### Environment variables
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `GROQ_API_KEY` | — | Required. Groq API key |
-| `LLM_MODEL` | `llama-3.1-8b-instant` | Groq model name |
-| `WHISPER_MODEL` | `base` | Faster-Whisper model size |
-| `WHISPER_DEVICE` | `cpu` | `cpu` or `cuda` |
-| `WHISPER_COMPUTE_TYPE` | `int8` | CTranslate2 compute type |
-| `WHISPER_LANGUAGE` | `en` | Empty value = auto-detect |
-| `RAG_MAX_DISTANCE` | `0.8` | FAQs further than this (cosine distance) are ignored |
-| `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Origins allowed to call the API and open the WebSocket |
+| `GROQ_API_KEY` | — | Required |
+| `AGENT_MODEL` | `openai/gpt-oss-120b` | Model for the tool-calling agent |
+| `LLM_MODEL` | `openai/gpt-oss-20b` | Model for triage, briefings and post-call analysis |
+| `WHISPER_MODEL` / `WHISPER_DEVICE` / `WHISPER_COMPUTE_TYPE` | `base` / `cpu` / `int8` | Speech recognition |
+| `WHISPER_LANGUAGE` | `en` | Language a call starts in; empty = auto-detect |
+| `SUPPORTED_LANGUAGES` | `en,hi,ta` | Languages the caller may pick |
+| `TTS_VOICES` | `hi:hi_IN-pratham-medium` | Extra Piper voices as `lang:model` pairs |
+| `RAG_MAX_DISTANCE` / `RAG_WEAK_DISTANCE` | `0.8` / `0.6` | FAQ relevance cutoffs (cosine distance) |
+| `CORS_ORIGINS` | `http://localhost:5173,…` | Origins allowed to call the API and open WebSockets |
+| `PUBLIC_HOST` | — | Public host for the Twilio phone bridge |
+| `VITE_WS_URL` (frontend) | same host as the page | WebSocket URL of the backend |
 
-Frontend (optional, `Frontend/.env`):
-
-| Variable | Purpose |
-|---|---|
-| `VITE_WS_URL` | Full WebSocket URL of the backend, if it is not on the same host as the page |
+Groq's free tier allows about 8,000 tokens per minute per model, which is a few turns per minute. Under heavier use a turn can pause for several seconds or fail with a retry message.
 
 ---
 
-## 📡 WebSocket Protocol
+## 🧭 Trying it out
 
-**Endpoint:** `ws://localhost:8000/ws/voice` (or `/ws/voice` through the Vite dev server)
+Sample orders (reset with `python -m app.db.store --reset`):
 
-### Client → Server
+| Order | Customer | Phone ends | Status | Good for |
+|---|---|---|---|---|
+| 1001 | Rahul Sharma | 1234 | Delivered 4 days ago | starting a return |
+| 1002 | Priya Patel | 5678 | In transit | status and tracking |
+| 1003 | Arjun Mehta | 2468 | Processing | cancel, change address |
+| 1004 | Sneha Joshi | 1357 | Cancelled | refund status |
+| 1005 | Rahul Sharma | 1234 | Processing | cancel, change address |
+| 1006 | Priya Patel | 5678 | Delivered 41 days ago | return refused (outside 30 days) |
 
-| Frame Type | Content | Description |
-|---|---|---|
-| Binary | Raw PCM bytes (int16, 16kHz, mono) | Microphone audio stream |
-| Text (JSON) | `{ "action": "end_session" }` | Mic turned off — process any speech still buffered |
-| Text (JSON) | `{ "action": "barge_in" }` | Cancel the current turn |
-| Text (JSON) | `{ "action": "clear_buffer" }` | Discard buffered audio |
+A conversation to try:
 
-### Server → Client
+1. "Where is my order one zero zero three?" → the agent asks for the last four phone digits
+2. "Two four six eight" → verified; it reads the status
+3. "Please cancel it" → it asks you to confirm
+4. "Yes" → cancelled in the database
+5. "I want to talk to a human" → open **Supervisor** in a second tab, read the briefing, take over and type a reply
+6. Press **End call and summarise**, then open **Analytics**
 
-| Message Type | Payload | Description |
-|---|---|---|
-| `transcript` | `{ text, language, language_probability, turn_id }` | STT result |
-| `response` | `{ text, intent, confidence, should_escalate, summary, sentiment_score, turn_id }` | Agent response |
-| `tts_start` | `{ turn_id }` | Synthesis beginning |
-| `audio` | `{ data: <base64 WAV>, turn_id }` | One sentence of TTS audio |
-| `tts_end` | `{ turn_id }` | Synthesis complete (playback may still be running) |
-| `barge_in` | `{ turn_id }` | User started speaking — stop playback, ignore turns ≤ `turn_id` |
-| `status` | `{ message }` | Connection / pipeline status |
-| `error` | `{ message }` | A turn failed; the connection stays open |
+---
+
+## 🧪 Evaluation
+
+```bash
+cd Backend
+python -m eval.make_audio            # speak the test sentences with Piper (once)
+python -m eval.run_eval              # full run, uses the Groq API
+python -m eval.run_eval --no-llm     # speech + retrieval only
+```
+
+`eval/cases.json` holds the test sentences with the expected intent, tool, FAQ and order number. The harness runs each one through the real STT, retrieval and agent code against a temporary copy of the database and reports:
+
+| Metric | Meaning |
+|---|---|
+| Word error rate | speech-to-text errors against the reference sentence |
+| Order numbers heard | spoken numbers recovered as digits |
+| Retrieval hit rate | expected FAQ among the retrieved articles |
+| Intent / tool accuracy | the agent filed the turn correctly and called the expected tool |
+
+Synthetic speech is a best case. For a realistic score, record the sentences yourself and put them in `eval/audio/` under the same file names.
+
+---
+
+## ☎️ Phone calls (Twilio)
+
+1. Expose the backend publicly, for example `ngrok http 8000`
+2. Set `PUBLIC_HOST=<your-ngrok-host>` in `.env` and restart the backend
+3. In the Twilio console, set your number's **Voice webhook** to `https://<your-ngrok-host>/twilio/voice` (HTTP POST)
+4. Call the number
+
+Phone calls appear on the Supervisor and Analytics pages like browser calls. Requests are not signature-checked yet — validate `X-Twilio-Signature` before production use.
+
+---
+
+## 📡 API
+
+| Endpoint | Purpose |
+|---|---|
+| `WS /ws/voice` | Browser call. Binary frames: PCM int16 16 kHz mono. Text frames: JSON controls |
+| `WS /ws/supervisor` | Live call board; actions `takeover`, `say`, `release` |
+| `WS /ws/twilio`, `POST /twilio/voice` | Phone bridge |
+| `GET /api/analytics/summary` · `/calls` · `/calls/{id}` | Analytics |
+| `GET /api/calls/live` | Calls in progress |
+| `GET /api/health` | Health check |
+
+Messages on `/ws/voice` (server → client): `transcript`, `tool`, `partial`, `response`, `tts_start`, `audio`, `tts_end`, `metrics`, `barge_in`, `verified`, `language`, `handoff`, `call_summary`, `status`, `error`. Turn messages carry a `turn_id` so the client can drop anything from an interrupted turn. Controls (client → server): `end_session`, `barge_in`, `clear_buffer`, `set_language`, `end_call`. Full details are in the docstring of `Backend/app/api/websocket.py`.
+
+The supervisor and analytics endpoints have no login. They are for local demos; add authentication before exposing them.
 
 ---
 
 ## 💡 Interview Highlights
 
-These are the technically interesting decisions made during this project:
+**1. Streaming is a queue between two tasks.** The agent node emits each sentence as the LLM finishes it; a TTS worker consumes them. Cancelling the turn task (barge-in) cancels both.
 
-**1. Why each turn runs as an `asyncio` task**
-STT, the agent and TTS run in a background task, so the WebSocket receive loop never stops reading audio. That is what makes barge-in possible: the loop sees new speech while the agent is still thinking or talking, and calls `task.cancel()`.
+**2. One call session, two transports.** The browser socket and the Twilio bridge only move audio. Turn-taking, the agent, persistence and handoff live in `CallSession`, so the phone channel was about 200 lines.
 
-**2. VAD endpointing instead of fixed-size chunks**
-Cutting audio every N seconds splits sentences mid-word. Instead, Silero VAD checks the trailing 0.8 seconds of the buffer on every frame: the first speech marks the start of an utterance, and the first silent window marks the end.
+**3. Guardrails in code, not in the prompt.** Verification is checked inside every order tool. Changes are parked and executed by a separate graph node only after a classified "yes", and eligibility is re-checked at that moment.
 
-**3. Turn IDs to discard stale messages**
-After an interruption, audio for the old turn may already be on the wire. Every message carries a `turn_id`; `barge_in` tells the browser which turns to ignore, and the audio player uses a generation counter so a chunk that is still decoding never plays.
+**4. Two models, split by job.** A small fast model does classification and summaries; a stronger one does tool calling. It also splits the rate-limit budget.
 
-**4. LangGraph over a plain LLM call**
-Each turn flows through discrete nodes: sentiment → intent → retrieval or order lookup → response → summary. Nodes can be added or reordered without touching the rest of the pipeline.
+**5. Turn IDs for stale messages.** After an interruption, audio for the old turn may already be on the wire. `barge_in` tells the client which turns to ignore.
 
-**5. Sentiment-based auto-escalation**
-Sentiment is scored on every turn and kept in `sentiment_history`. Two consecutive scores below -0.5 trigger escalation, which avoids false positives from one frustrated sentence.
+**6. Sentiment relative to the caller.** Arousal is measured against that caller's running baseline, so a naturally loud voice is not read as anger. It is a transparent heuristic, not a trained emotion model.
 
-**6. RAG with a relevance cutoff**
-Only the FAQs nearest to the question are sent to the LLM, and anything beyond a cosine-distance threshold is dropped — so an off-topic question gets "I don't have that information" rather than an answer built from unrelated FAQs.
+**7. Knowledge gaps close the loop.** An FAQ search with no match, or only a weak one, is logged. The analytics page turns those into a list of articles worth writing.
 
-**7. Failure isolation**
-A Groq rate limit or a malformed LLM reply fails only that turn. The user hears nothing wrong with the connection and can simply ask again.
+**8. It measures itself.** The evaluation harness found a real bug during development: Whisper wrote "one thousand and three" as "1,000 and 3", which the order-number parser missed.
 
 ---
 
@@ -239,50 +288,43 @@ A Groq rate limit or a malformed LLM reply fails only that turn. The user hears 
 
 ```
 VoiceIQ/
+├── docker-compose.yml
 ├── .env.example
 ├── Backend/
-│   ├── main.py                     # FastAPI app, model warm-up (lifespan)
-│   ├── requirements.txt
+│   ├── main.py                     # FastAPI app, model warm-up
+│   ├── Dockerfile · docker_entrypoint.py
 │   ├── app/
-│   │   ├── config.py               # Settings via pydantic-settings
+│   │   ├── config.py
 │   │   ├── api/
-│   │   │   ├── health.py           # GET /api/health
-│   │   │   └── websocket.py        # /ws/voice — turn-taking, barge-in
-│   │   ├── stt/
-│   │   │   ├── pipeline.py         # Faster-Whisper
-│   │   │   └── vad.py              # Silero VAD
-│   │   ├── tts/
-│   │   │   └── pipeline.py         # Piper TTS, sentence streaming
+│   │   │   ├── websocket.py        # /ws/voice (browser transport)
+│   │   │   ├── supervisor.py       # /ws/supervisor
+│   │   │   ├── analytics.py        # /api/analytics/*
+│   │   │   ├── twilio.py           # phone bridge
+│   │   │   └── health.py
+│   │   ├── call/
+│   │   │   ├── session.py          # CallSession: turn-taking, pipeline, handoff, analysis
+│   │   │   └── registry.py         # live calls → supervisors
 │   │   ├── agent/
-│   │   │   ├── state.py            # AgentState
-│   │   │   ├── nodes.py            # sentiment, intent, lookup, response, summary
-│   │   │   └── graph.py            # LangGraph wiring
-│   │   └── rag/
-│   │       ├── ingest.py           # Build the ChromaDB collection
-│   │       └── retriever.py        # Query it
-│   └── data/
-│       ├── knowledge_base.json     # FAQs
-│       ├── orders_db.json          # Sample orders
-│       └── tts_models/             # Piper voice (downloaded, see Setup)
+│   │   │   ├── graph.py            # LangGraph wiring
+│   │   │   ├── nodes.py            # triage, resolve_pending, agent, escalate, fallback
+│   │   │   ├── tools.py            # FAQ, verification, order tools
+│   │   │   ├── context.py          # per-call and per-turn state
+│   │   │   ├── text.py             # spoken numbers, sentence splitter
+│   │   │   ├── i18n.py · llm.py · state.py
+│   │   ├── stt/                    # Faster-Whisper, Silero VAD, prosody
+│   │   ├── tts/                    # Piper, per-language voices
+│   │   ├── rag/                    # ChromaDB ingest + retriever
+│   │   └── db/store.py             # SQLite: orders, calls, turns, knowledge gaps
+│   ├── eval/                       # cases.json, make_audio.py, run_eval.py
+│   └── data/                       # knowledge_base.json, orders_db.json (seed)
 └── Frontend/
-    ├── index.html
-    ├── package.json
-    ├── vite.config.js
+    ├── Dockerfile · nginx.conf
     └── src/
-        ├── App.jsx
-        ├── pages/
-        │   └── VoiceAgent.jsx      # Main page
-        ├── components/
-        │   ├── CallLog.jsx         # Transcript log
-        │   ├── IntentBadge.jsx
-        │   └── StatsBar.jsx        # Intent pie + reply time
-        ├── hooks/
-        │   ├── useVoiceSocket.js   # WebSocket + mic capture
-        │   └── useAudioPlayer.js   # Queued playback
-        ├── audio/
-        │   └── pcm-worklet.js      # AudioWorklet: resample to 16 kHz PCM
-        └── utils/
-            └── entities.js         # Entity highlighting
+        ├── pages/                  # VoiceAgent, Supervisor, Analytics
+        ├── components/             # CallLog, StatsBar, SentimentChart, LatencyBar, Header
+        ├── hooks/                  # useVoiceSocket, useAudioPlayer
+        ├── audio/pcm-worklet.js
+        └── utils/                  # chartTheme, entities
 ```
 
 ---

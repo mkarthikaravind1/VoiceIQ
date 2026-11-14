@@ -1,0 +1,13 @@
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.env
+
+# Created at runtime inside the data volume
+data/chroma_db/
+data/*.db
+data/tts_models/*.onnx
+
+eval/audio/
+eval/report.json

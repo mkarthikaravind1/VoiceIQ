@@ -1,77 +1,51 @@
 """
-LangGraph agent graph.
-Flow (one run per user turn):
-  analyze_sentiment
-      ├─ frustrated 2 turns in a row → escalate
-      └─ detect_intent
-            ├─ confidence < threshold  → low_confidence_fallback
-            ├─ intent == escalate      → escalate
-            ├─ intent == order_lookup  → lookup_order → generate_response
-            └─ intent == faq           → faq_retrieve → generate_response
-  every path ends in generate_summary
+LangGraph agent graph — one run per caller turn.
+
+  triage  (sentiment + intent + yes/no, one fast LLM call)
+     ├─ frustrated twice, or asks for a person → escalate
+     ├─ an action is waiting for confirmation  → resolve_pending → agent
+     ├─ unintelligible                         → fallback
+     └─ everything else                        → agent  (streams, calls tools)
+  every path ends in summarize
 """
 import time
-from typing import Any
+from typing import Any, Awaitable, Callable
 from langgraph.graph import StateGraph, END
-from app.agent.state import AgentState
+from app.agent.context import CallContext, TurnTrace
 from app.agent.nodes import (
-    analyze_sentiment,
-    detect_intent,
-    lookup_order,
-    faq_retrieve,
+    triage,
+    route_after_triage,
+    resolve_pending,
+    agent,
     escalate,
-    generate_response,
-    low_confidence_fallback,
-    generate_summary,
+    fallback,
+    summarize,
 )
-from app.config import get_settings
+from app.agent.state import AgentState
+from app.agent.text import normalize_transcript
 
-settings = get_settings()
-
-
-def route_after_intent(state: AgentState) -> str:
-    """Conditional edge: decide next node based on intent + confidence."""
-    if state["confidence"] < settings.confidence_threshold:
-        return "low_confidence_fallback"
-    if state["intent"] == "escalate":
-        return "escalate"
-    if state["intent"] == "order_lookup":
-        return "lookup_order"
-    if state["intent"] == "faq":
-        return "faq_retrieve"
-    return "low_confidence_fallback"
-
-def route_after_sentiment(state: AgentState) -> str:
-    """Auto-escalate if frustrated 2+ turns in a row."""
-    history = state.get("sentiment_history") or []
-    if len(history) >= 2 and all(s < -0.5 for s in history[-2:]):
-        print(f"[Auto-Escalate] Frustrated {len(history[-2:])} turns → escalating")
-        return "escalate"
-    return "detect_intent"
 
 def build_graph() -> Any:
     graph = StateGraph(AgentState)
 
-    # Register nodes
-    graph.add_node("analyze_sentiment", analyze_sentiment)
-    graph.add_node("detect_intent", detect_intent)
-    graph.add_node("lookup_order", lookup_order)
-    graph.add_node("faq_retrieve", faq_retrieve)
+    graph.add_node("triage", triage)
+    graph.add_node("resolve_pending", resolve_pending)
+    graph.add_node("agent", agent)
     graph.add_node("escalate", escalate)
-    graph.add_node("generate_response", generate_response)
-    graph.add_node("low_confidence_fallback", low_confidence_fallback)
-    graph.add_node("generate_summary", generate_summary)
+    graph.add_node("fallback", fallback)
+    graph.add_node("summarize", summarize)
 
-    # Edges
-    graph.set_entry_point("analyze_sentiment")
-    graph.add_conditional_edges("analyze_sentiment", route_after_sentiment)
-    graph.add_conditional_edges("detect_intent", route_after_intent)
-    graph.add_edge("lookup_order", "generate_response")
-    graph.add_edge("faq_retrieve", "generate_response")
-    graph.add_edge("generate_response", "generate_summary")
-    graph.add_edge("escalate", "generate_summary")
-    graph.add_edge("low_confidence_fallback", "generate_summary")
-    graph.add_edge("generate_summary", END)
+    graph.set_entry_point("triage")
+    graph.add_conditional_edges(
+        "triage",
+        route_after_triage,
+        ["escalate", "resolve_pending", "fallback", "agent"],
+    )
+    graph.add_edge("resolve_pending", "agent")
+    graph.add_edge("agent", "summarize")
+    graph.add_edge("escalate", "summarize")
+    graph.add_edge("fallback", "summarize")
+    graph.add_edge("summarize", END)
 
     return graph.compile()
 
@@ -89,38 +63,52 @@ def get_agent():
 
 async def run_agent(
     transcript: str,
-    language: str = "en",
-    sentiment_history: list | None = None,
-    conversation_history: list | None = None,
+    ctx: CallContext,
+    emit: Callable[[dict], Awaitable[None]] | None = None,
+    arousal: float = 0.0,
 ) -> dict:
     """
-    Main entry point called from WebSocket handler.
-    Returns dict with response text and escalation flag.
+    Run one turn. `emit` receives events (triage, tool, sentence) while the turn
+    is still running; the returned dict is the finished turn.
     """
-    agent = get_agent()
+    trace = TurnTrace()
     initial_state: AgentState = {
         "transcript": transcript,
-        "language": language,
+        "normalized": normalize_transcript(transcript),
+        "language": ctx.language,
+        "arousal": arousal,
         "intent": "",
         "confidence": 0.0,
-        "order_id": None,
-        "retrieved_context": "",
+        "confirmation": "none",
+        "sentiment_text": 0.0,
+        "sentiment": 0.0,
+        "action_note": "",
         "response": "",
         "should_escalate": False,
+        "tools": [],
         "summary": None,
+        "timings": {},
         "_start_time": time.time(),
-        "sentiment_score": None,
-        "sentiment_history": list(sentiment_history or []),
-        "conversation_history": list(conversation_history or []),
     }
-    result = await agent.ainvoke(initial_state)
+    result = await get_agent().ainvoke(
+        initial_state,
+        config={"configurable": {"ctx": ctx, "trace": trace, "emit": emit}},
+    )
     return {
         "response": result["response"],
         "intent": result["intent"],
         "confidence": result["confidence"],
         "should_escalate": result["should_escalate"],
+        "escalate_reason": trace.escalate_reason,
         "summary": result.get("summary"),
-        "sentiment_score": result.get("sentiment_score"),
-        "sentiment_history": result.get("sentiment_history", []),
-        "conversation_history": result.get("conversation_history", []),
+        "sentiment": result["sentiment"],
+        "sentiment_text": result["sentiment_text"],
+        "arousal": arousal,
+        "tools": list(trace.tools),
+        "kb_miss": trace.kb_miss,
+        "kb_queries": list(trace.kb_queries),
+        "verified_now": trace.verified_now,
+        "action_done": trace.action_done,
+        "pending_question": ctx.pending_action["question"] if ctx.pending_action else None,
+        "timings": result.get("timings", {}),
     }

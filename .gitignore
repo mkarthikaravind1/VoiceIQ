@@ -35,3 +35,10 @@ Working.txt
 
 # Claude Code local config
 .claude/
+
+# Local SQLite database (created and seeded on first start)
+Backend/data/*.db
+
+# Evaluation audio and results (regenerate with python -m eval.make_audio)
+Backend/eval/audio/
+Backend/eval/report.json

@@ -1,0 +1,36 @@
+# Run the whole app:   docker compose up --build
+# Then open:           http://localhost:8080
+#
+# Needs a .env file in this folder with GROQ_API_KEY (copy .env.example).
+# The first start downloads the speech models (about 300 MB) into the
+# "voiceiq-data" volume; later starts reuse them.
+
+services:
+  backend:
+    build: ./Backend
+    env_file: .env
+    environment:
+      # Everything that must survive a restart lives in the data volume
+      DB_PATH: /data/voiceiq.db
+      CHROMA_PERSIST_DIR: /data/chroma_db
+      TTS_MODEL_DIR: /data/tts_models
+      HF_HOME: /data/huggingface
+      # The page is served from port 8080, so that is the origin to allow
+      CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+    volumes:
+      - voiceiq-data:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build: ./Frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  voiceiq-data:

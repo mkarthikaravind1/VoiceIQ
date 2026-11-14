@@ -13,6 +13,7 @@ async def health_check():
         "config": {
             "whisper_model": settings.whisper_model,
             "llm_model": settings.llm_model,
+            "agent_model": settings.agent_model,
             "tts_model": settings.tts_model,
         },
     }

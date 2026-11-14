@@ -16,7 +16,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
-from app.api import health, websocket
+from app.api import analytics, health, supervisor, twilio, websocket
+from app.db import store
 from app.agent.graph import get_agent
 from app.rag.retriever import get_retriever
 from app.stt.pipeline import get_stt
@@ -32,12 +33,13 @@ async def lifespan(app: FastAPI):
     print("🚀 VoiceIQ backend starting up...")
     if not settings.groq_api_key:
         print("⚠️  GROQ_API_KEY is not set — copy .env.example to .env and add your key.")
+    store.init_db()
     get_agent()
     get_retriever()
     get_stt()
     get_tts()
     print(f"   Whisper model : {settings.whisper_model}")
-    print(f"   LLM model     : {settings.llm_model}")
+    print(f"   LLM models    : {settings.agent_model} (agent), {settings.llm_model} (triage)")
     print(f"   TTS model     : {settings.tts_model}")
     print("✅ VoiceIQ ready!")
     yield
@@ -62,3 +64,6 @@ app.add_middleware(
 # Routers
 app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(websocket.router, tags=["WebSocket"])
+app.include_router(supervisor.router, tags=["Supervisor"])
+app.include_router(analytics.router, tags=["Analytics"])
+app.include_router(twilio.router, tags=["Phone"])

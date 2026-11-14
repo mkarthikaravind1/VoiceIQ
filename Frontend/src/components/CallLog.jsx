@@ -1,8 +1,21 @@
 import { useEffect, useRef } from 'react'
 import { IntentBadge } from './IntentBadge'
+import { LatencyBar } from './LatencyBar'
 import { highlightEntities } from '../utils/entities'
+import { toolLabel } from '../utils/chartTheme'
 
-export function CallLog({ entries }) {
+const SPEAKERS = {
+  ai:     { label: 'AI',    className: 'text-violet-600' },
+  human:  { label: 'Agent', className: 'text-emerald-700' },
+  system: { label: 'Info',  className: 'text-gray-500' },
+}
+
+function sentimentFace(score) {
+  if (score == null) return ''
+  return score < -0.5 ? '😠' : score < 0 ? '😐' : '🙂'
+}
+
+export function CallLog({ entries, showLatency = true }) {
   const bottomRef = useRef(null)
 
   useEffect(() => {
@@ -19,65 +32,57 @@ export function CallLog({ entries }) {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
-      {entries.map((entry, i) => (
-        <div key={i} className="space-y-1">
-          {/* User transcript */}
-          <div className="flex items-start gap-2">
-            <span className="text-xs text-black mt-0.5 font-mono w-6 shrink-0">
-              You {entry.sentiment != null
-                ? entry.sentiment < -0.5 ? '😠'
-                  : entry.sentiment < 0 ? '😐'
-                    : '🙂'
-                : ''}
-            </span>
-            <p className="text-sm text-black leading-relaxed">
-              {highlightEntities(entry.transcript).map((p, j) =>
-                p.type === 'plain'
-                  ? <span key={j}>{p.text}</span>
-                  : <span key={j} className={p.color}>{p.text}</span>
-              )}
-            </p>
-          </div>
-
-          {/* Agent response */}
-          {entry.response && (
-            <div className="flex items-start gap-2">
-              <span className="text-xs text-violet-500 mt-0.5 font-mono w-6 shrink-0">AI</span>
-              <div className="space-y-1">
-                <p className="text-sm text-black leading-relaxed">{entry.response}</p>
-                {!entry.summary?.escalated && (
-                  <IntentBadge intent={entry.intent} confidence={entry.confidence} />
-                )}
+      {entries.map((entry, i) => {
+        const speaker = SPEAKERS[entry.speaker] || SPEAKERS.ai
+        return (
+          <div key={i} className="space-y-1">
+            {/* Caller */}
+            {entry.transcript && (
+              <div className="flex items-start gap-2">
+                <span className="text-xs text-gray-900 mt-0.5 font-mono w-10 shrink-0">
+                  You {sentimentFace(entry.sentiment)}
+                </span>
+                <p className="text-sm text-gray-900 leading-relaxed">
+                  {highlightEntities(entry.transcript).map((p, j) =>
+                    p.type === 'plain'
+                      ? <span key={j}>{p.text}</span>
+                      : <span key={j} className={p.color}>{p.text}</span>
+                  )}
+                </p>
               </div>
-            </div>
-          )}
+            )}
 
-          {entry.summary && (
-              <div className="mt-1 flex flex-wrap gap-1 text-xs font-mono">
-                {!entry.summary.escalated && (
-                  <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-                      {entry.summary.resolution}
-                  </span>
+            {/* Reply */}
+            {entry.response && (
+              <div className="flex items-start gap-2">
+                <span className={`text-xs mt-0.5 font-mono w-10 shrink-0 ${speaker.className}`}>{speaker.label}</span>
+                <div className="space-y-1 min-w-0 flex-1">
+                  <p className="text-sm text-gray-900 leading-relaxed">{entry.response}</p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    {entry.speaker !== 'human' && entry.speaker !== 'system' && (
+                      <IntentBadge intent={entry.intent} confidence={entry.confidence} />
+                    )}
+                    {(entry.tools || []).map((tool, j) => (
+                      <span key={j} className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded text-[11px] font-mono">
+                        {toolLabel(tool)}
+                      </span>
+                    ))}
+                    {entry.summary?.resolution === 'action_done' && (
+                      <span className="bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded text-[11px] font-mono">✓ done</span>
+                    )}
+                    {entry.summary?.escalated && (
+                      <span className="bg-amber-50 text-amber-900 px-1.5 py-0.5 rounded text-[11px] font-mono">escalated</span>
+                    )}
+                  </div>
+                  {showLatency && <LatencyBar timings={entry.timings} />}
+                </div>
+              </div>
             )}
-            {entry.summary.order_id && (
-              <span className="bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded">
-                #{entry.summary.order_id}
-              </span>
-            )}
-            {entry.summary.escalated && (
-              <span className="bg-red-50 text-red-500 px-1.5 py-0.5 rounded">escalated</span>
-            )}
-            <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-              {entry.summary.duration_s}s
-            </span>
+
+            {i < entries.length - 1 && <div className="border-b border-gray-200 mt-2" />}
           </div>
-        )}
-
-          {i < entries.length - 1 && (
-            <div className="border-b border-gray-200 mt-2" />
-          )}
-        </div>
-      ))}
+        )
+      })}
       <div ref={bottomRef} />
     </div>
   )

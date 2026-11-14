@@ -1,6 +1,6 @@
 """
 RAG retriever — queries ChromaDB for top-K relevant FAQ entries.
-Used by the LangGraph faq_retrieve node.
+Used by the agent's search_faq tool.
 """
 import chromadb
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
@@ -27,13 +27,18 @@ class FAQRetriever:
             self.collection = None
 
     def retrieve(self, query: str) -> str:
+        """Context string for the LLM, or "" if nothing is close enough."""
+        return self.search(query)[0]
+
+    def search(self, query: str) -> tuple[str, float | None, list[str]]:
         """
         Query ChromaDB for top-K relevant FAQ entries.
-        Returns a formatted context string for the LLM, or "" if nothing is
-        close enough to the question.
+        Returns (context, best_distance, ids). Context is "" when nothing is
+        close enough to the question; best_distance lets the caller tell a
+        strong match from a weak one.
         """
         if self.collection is None or self.collection.count() == 0:
-            return ""
+            return "", None, []
 
         results = self.collection.query(
             query_texts=[query],
@@ -42,20 +47,22 @@ class FAQRetriever:
 
         metadatas = results.get("metadatas")
         if not metadatas or not metadatas[0]:
-            return ""
+            return "", None, []
 
         distances = results.get("distances")
 
         # Keep only entries that are actually related to the question, so an
         # off-topic question gets empty context instead of three random FAQs.
-        context_parts = []
+        context_parts, ids = [], []
         for i, meta in enumerate(metadatas[0]):
             distance = distances[0][i] if distances else None
             if distance is not None and distance > settings.rag_max_distance:
                 continue
             context_parts.append(f"Q: {meta['question']}\nA: {meta['answer']}")
+            ids.append(str(meta.get("id", "")))
 
-        return "\n\n".join(context_parts)
+        best = min(distances[0]) if distances and distances[0] else None
+        return "\n\n".join(context_parts), best, ids
 
 
 # Singleton

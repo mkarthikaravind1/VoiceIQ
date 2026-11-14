@@ -27,7 +27,7 @@
   {
     "id": "faq_006",
     "question": "Can I change or cancel my order?",
-    "answer": "Orders can be modified or cancelled within 1 hour of placement. After that, the order enters processing and cannot be changed. Please contact support immediately if you need to make changes."
+    "answer": "Orders can be cancelled or have their delivery address changed any time before they ship, which is while the status is Processing. You can do this right here: tell this voice agent your order number. Once an order has shipped it cannot be cancelled, but it can be returned after delivery."
   },
   {
     "id": "faq_007",
@@ -82,7 +82,7 @@
   {
     "id": "faq_017",
     "question": "How do I update my shipping address?",
-    "answer": "Log in to your account, go to 'My Profile', and click 'Edit Address'. You can save multiple addresses and select a default one. Note that address changes do not apply to already-placed orders."
+    "answer": "For future orders, log in to your account, go to 'My Profile', and click 'Edit Address'. For an order you have already placed, this voice agent can change the delivery address as long as the order has not shipped yet."
   },
   {
     "id": "faq_018",

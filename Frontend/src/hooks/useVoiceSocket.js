@@ -70,15 +70,8 @@ export function useVoiceSocket(handlers) {
     ws.onmessage = (event) => {
       const h = handlersRef.current
       try {
-        const msg = JSON.parse(event.data)
-        if (msg.type === 'transcript')      h.onTranscript?.(msg)
-        else if (msg.type === 'response')   h.onResponse?.(msg)
-        else if (msg.type === 'status')     h.onStatus?.(msg)
-        else if (msg.type === 'error')      h.onError?.(msg)
-        else if (msg.type === 'audio')      h.onAudio?.(msg)
-        else if (msg.type === 'barge_in')   h.onBargeIn?.(msg)
-        else if (msg.type === 'tts_start')  h.onTtsStart?.(msg)
-        else if (msg.type === 'tts_end')    h.onTtsEnd?.(msg)
+        // Every server message has a "type"; the page decides what to do with it
+        h.onMessage?.(JSON.parse(event.data))
       } catch (e) {
         console.error('[WS] Parse error', e)
       }
