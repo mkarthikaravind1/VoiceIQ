@@ -17,8 +17,8 @@ node_modules/
 frontend/dist/
 frontend/.env
 
-# Models (large files — download separately)
-backend/models/
+# Models (large files — download separately, see README)
+Backend/data/tts_models/*.onnx
 
 # OS
 .DS_Store
@@ -32,9 +32,3 @@ Thumbs.db
 Notes for Running.txt
 websocket.txt
 Working.txt
-
-package-lock.json
-package.json
-postcss.config.js
-tailwind.config.js
-vite.config.js

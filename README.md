@@ -121,12 +121,18 @@ venv\Scripts\activate        # Windows
 # Install dependencies
 pip install -r requirements.txt
 
-# Set environment variables
-copy .env.example .env
+# Set environment variables (.env lives in the repo root)
+copy ..\.env.example ..\.env
 # Edit .env and add your GROQ_API_KEY
 
+# Download the Piper voice model (~63 MB, not stored in git)
+curl -L -o data/tts_models/en_US-lessac-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
+
+# Build the FAQ vector store (once, and again whenever knowledge_base.json changes)
+python -m app.rag.ingest
+
 # Run the server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Frontend

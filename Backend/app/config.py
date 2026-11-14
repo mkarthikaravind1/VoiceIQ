@@ -1,5 +1,9 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pathlib import Path
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+_REPO_ROOT = _BACKEND_DIR.parent
 
 
 class Settings(BaseSettings):
@@ -33,7 +37,11 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
 
     class Config:
-        env_file = ".env"
+        # Resolved from this file, not the current directory, so the key loads
+        # whether the server is started from the repo root or from Backend/.
+        # Backend/.env (if present) overrides the repo-root .env.
+        env_file = (str(_REPO_ROOT / ".env"), str(_BACKEND_DIR / ".env"))
+        extra = "ignore"
 
 
 @lru_cache()

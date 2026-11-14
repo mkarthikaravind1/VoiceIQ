@@ -102,7 +102,8 @@ def detect_intent(state: AgentState) -> AgentState:
         intent = parsed.get("intent", "unknown")
         confidence = float(parsed.get("confidence", 0.5))
         order_id = parsed.get("order_id") or (order_match.group(1) if order_match else None)
-    except (json.JSONDecodeError, ValueError):
+    except Exception:
+        # Not JSON, wrong shape, null confidence, etc. — fall back, don't crash the call
         intent = "unknown"
         confidence = 0.0
         order_id = None
@@ -232,15 +233,16 @@ Examples:
 """
 
 def analyze_sentiment(state: AgentState) -> AgentState:
-    response = llm.invoke([
-        SystemMessage(content=SENTIMENT_PROMPT),
-        HumanMessage(content=state["transcript"]),
-    ])
     try:
+        response = llm.invoke([
+            SystemMessage(content=SENTIMENT_PROMPT),
+            HumanMessage(content=state["transcript"]),
+        ])
         parsed = json.loads(str(response.content).strip())
         score = float(parsed.get("sentiment", 0.0))
         score = max(-1.0, min(1.0, score))
-    except (json.JSONDecodeError, ValueError):
+    except Exception:
+        # Sentiment is optional — an LLM/parse failure must not fail the turn
         score = 0.0
 
     history = state.get("sentiment_history") or []

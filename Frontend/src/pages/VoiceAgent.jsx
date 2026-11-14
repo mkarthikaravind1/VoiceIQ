@@ -68,35 +68,35 @@ export default function VoiceAgent() {
   const [pendingEntry,  setPendingEntry]  = useState(null)
   const startTimeRef = useRef(null)
   const pendingEntryRef = useRef(null)
-  const isAgentSpeakingRef = useRef(false)
-  const isInterruptedRef = useRef(false)   // add this ref
+  // Messages for turns up to this id belong to an interrupted turn — ignore them
+  const ignoreUpToRef = useRef(0)
 
   const { playChunk, stopPlayback } = useAudioPlayer()
 
-  // Add these two callbacks
-  const onTtsStart = useCallback(() => {
-    isAgentSpeakingRef.current = true
-    isInterruptedRef.current = false 
-  }, [])
+  const isStale = (msg) => msg.turn_id != null && msg.turn_id <= ignoreUpToRef.current
 
-  const onTtsEnd = useCallback(() => {
-    isAgentSpeakingRef.current = false
-  }, [])
+  // Server heard the user start speaking (barge-in): stop the agent's voice now.
+  const onBargeIn = useCallback((msg) => {
+    stopPlayback()
+    if (msg.turn_id != null) ignoreUpToRef.current = msg.turn_id
+    // Interrupted before the agent answered — keep what the user said in the log
+    const pending = pendingEntryRef.current
+    if (pending) {
+      setEntries(prev => [...prev, { transcript: pending.transcript, response: '', latency: 0, ts: Date.now() }])
+      pendingEntryRef.current = null
+      setPendingEntry(null)
+    }
+  }, [stopPlayback])
 
   const onTranscript = useCallback((msg) => {
-    if (isAgentSpeakingRef.current) {
-      stopPlayback()                              // ← barge-in happens here
-      isAgentSpeakingRef.current = false
-      isInterruptedRef.current = true         // ← set flag
-      sendControl({ action: 'barge_in' })    // ← tell backend to stop TTS
-      console.log('[Barge-in] User interrupted agent')
-    }
+    if (isStale(msg)) return
     startTimeRef.current = Date.now()
     pendingEntryRef.current = { transcript: msg.text, language: msg.language }
     setPendingEntry({ transcript: msg.text, language: msg.language })
   }, [])
 
   const onResponse = useCallback((msg) => {
+    if (isStale(msg)) return
     const latency = startTimeRef.current ? Date.now() - startTimeRef.current : 0
     setEntries(prev => [...prev, {
       transcript: pendingEntryRef.current?.transcript || '',
@@ -132,18 +132,20 @@ export default function VoiceAgent() {
   // }, [pendingEntry])
 
   const onStatus = useCallback((msg) => setStatus(msg.message), [])
-  const onError  = useCallback((msg) => setStatus(`Error: ${msg.message}`), [])
+  const onError  = useCallback((msg) => {
+    setStatus(`Error: ${msg.message}`)
+    // A failed turn never sends a response — don't leave "Processing..." stuck
+    pendingEntryRef.current = null
+    setPendingEntry(null)
+  }, [])
   const onAudio = useCallback((msg) => {
-    if (!isInterruptedRef.current) {
-      playChunk(msg.data)
-    }
+    if (!isStale(msg)) playChunk(msg.data)
   }, [playChunk])
 
-  const { connected, listening, connect, startListening, stopListening, sendControl } =
-    useVoiceSocket({ onTranscript, onResponse, onStatus, onError, onAudio, onTtsStart, onTtsEnd })
+  const { connected, listening, startListening, stopListening } =
+    useVoiceSocket({ onTranscript, onResponse, onStatus, onError, onAudio, onBargeIn })
 
   const handleMicClick = async () => {
-    if (!connected) await connect()
     if (listening) stopListening()
     else await startListening()
   }

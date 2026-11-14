@@ -4,27 +4,43 @@ const WS_URL = 'ws://localhost:8000/ws/voice'
 const SAMPLE_RATE = 16000
 const BUFFER_SIZE = 4096
 
-// ── CHANGE: add onTtsStart, onTtsEnd to params
-export function useVoiceSocket({ onTranscript, onResponse, onStatus, onError, onAudio, onTtsStart, onTtsEnd }) {
-  const wsRef        = useRef(null)
-  const streamRef    = useRef(null)
-  const processorRef = useRef(null)
-  const contextRef   = useRef(null)
+export function useVoiceSocket({ onTranscript, onResponse, onStatus, onError, onAudio, onTtsStart, onTtsEnd, onBargeIn }) {
+  const wsRef             = useRef(null)
+  const connectPromiseRef = useRef(null)
+  const streamRef         = useRef(null)
+  const processorRef      = useRef(null)
+  const contextRef        = useRef(null)
 
   const [connected, setConnected]   = useState(false)
   const [listening, setListening]   = useState(false)
 
-  const connect = useCallback(async () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return
+  // Resolves once the socket is actually open. Calling it again while a
+  // connection is open or in progress reuses that one instead of opening another.
+  const connect = useCallback(() => {
+    const existing = wsRef.current
+    if (existing?.readyState === WebSocket.OPEN) return Promise.resolve()
+    if (existing?.readyState === WebSocket.CONNECTING && connectPromiseRef.current) {
+      return connectPromiseRef.current
+    }
 
     const ws = new WebSocket(WS_URL)
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
 
-    ws.onopen = () => {
-      setConnected(true)
-      console.log('[WS] Connected')
-    }
+    const promise = new Promise((resolve, reject) => {
+      ws.onopen = () => {
+        setConnected(true)
+        console.log('[WS] Connected')
+        resolve()
+      }
+      ws.onerror = (e) => {
+        console.error('[WS] Error', e)
+        onError?.({ message: 'WebSocket connection error' })
+        reject(new Error('WebSocket connection error'))
+      }
+    })
+    promise.catch(() => {})   // callers that await still see the rejection
+    connectPromiseRef.current = promise
 
     ws.onmessage = (event) => {
       try {
@@ -34,33 +50,40 @@ export function useVoiceSocket({ onTranscript, onResponse, onStatus, onError, on
         else if (msg.type === 'status')   onStatus?.(msg)
         else if (msg.type === 'error')    onError?.(msg)
         else if (msg.type === 'audio') onAudio?.(msg)
-        else if (msg.type === 'tts_start')  onTtsStart?.()   // ── ADD
-        else if (msg.type === 'tts_end')    onTtsEnd?.() 
+        else if (msg.type === 'barge_in')   onBargeIn?.(msg)
+        else if (msg.type === 'tts_start')  onTtsStart?.(msg)
+        else if (msg.type === 'tts_end')    onTtsEnd?.(msg)
       } catch (e) {
         console.error('[WS] Parse error', e)
       }
     }
 
     ws.onclose = () => {
+      console.log('[WS] Disconnected')
+      // Ignore a stale socket closing after a newer one replaced it
+      if (wsRef.current !== ws) return
+      wsRef.current = null
+      connectPromiseRef.current = null
       setConnected(false)
       setListening(false)
-      console.log('[WS] Disconnected')
     }
 
-    ws.onerror = (e) => {
-      console.error('[WS] Error', e)
-      onError?.({ message: 'WebSocket connection error' })
-    }
-  }, [onTranscript, onResponse, onStatus, onError, onAudio, onTtsStart, onTtsEnd])
+    return promise
+  }, [onTranscript, onResponse, onStatus, onError, onAudio, onTtsStart, onTtsEnd, onBargeIn])
 
   const startListening = useCallback(async () => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+    try {
       await connect()
-      await new Promise(r => setTimeout(r, 500))
+    } catch {
+      return   // onError already reported it
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Echo cancellation keeps the agent's own voice (from the speakers)
+      // from being heard as the user interrupting.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      })
       streamRef.current = stream
 
       const ctx = new AudioContext({ sampleRate: SAMPLE_RATE })
@@ -83,7 +106,7 @@ export function useVoiceSocket({ onTranscript, onResponse, onStatus, onError, on
 
       source.connect(processor)
       processor.connect(ctx.destination)
-      
+
       setListening(true)
     } catch (err) {
       onError?.({ message: `Mic error: ${err.message}` })
@@ -98,7 +121,9 @@ export function useVoiceSocket({ onTranscript, onResponse, onStatus, onError, on
     streamRef.current    = null
     contextRef.current   = null
 
-    wsRef.current?.send(JSON.stringify({ action: 'end_session' }))
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'end_session' }))
+    }
     setListening(false)
   }, [])
 
@@ -106,6 +131,7 @@ export function useVoiceSocket({ onTranscript, onResponse, onStatus, onError, on
     stopListening()
     wsRef.current?.close()
     wsRef.current = null
+    connectPromiseRef.current = null
     setConnected(false)
   }, [stopListening])
 

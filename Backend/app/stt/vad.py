@@ -4,6 +4,7 @@ Buffers incoming audio chunks and only returns speech segments,
 filtering out silence — reduces STT calls and improves accuracy.
 """
 
+import threading
 import numpy as np
 import torch
 from silero_vad import load_silero_vad, get_speech_timestamps
@@ -20,6 +21,9 @@ MIN_SPEECH_DURATION = 0.3
 class VADProcessor:
     def __init__(self):
         self.model = None
+        # The Silero model keeps internal state between calls, so it must not
+        # run from two threads at once (endpointing + transcription overlap).
+        self._lock = threading.Lock()
         self._load_model()
 
     def _load_model(self):
@@ -28,22 +32,28 @@ class VADProcessor:
         #self.model.eval()
         print("✅ Silero VAD ready")
 
-    def is_speech(self, audio_bytes: bytes) -> bool:
+    def is_speech(
+        self,
+        audio_bytes: bytes,
+        min_speech_ms: int = int(MIN_SPEECH_DURATION * 1000),
+        min_silence_ms: int = 300,
+    ) -> bool:
         """
         Quick check: does this audio chunk contain speech?
-        Used for real-time gating before sending to Whisper.
+        Used for real-time endpointing (start/end of an utterance).
         """
         audio_np = self._bytes_to_tensor(audio_bytes)
         if audio_np is None:
             return False
 
-        timestamps = get_speech_timestamps(
-            audio_np,
-            self.model,
-            sampling_rate=SAMPLE_RATE,
-            min_speech_duration_ms=int(MIN_SPEECH_DURATION * 1000),
-            min_silence_duration_ms=300,
-        )
+        with self._lock:
+            timestamps = get_speech_timestamps(
+                audio_np,
+                self.model,
+                sampling_rate=SAMPLE_RATE,
+                min_speech_duration_ms=min_speech_ms,
+                min_silence_duration_ms=min_silence_ms,
+            )
         return len(timestamps) > 0
 
     def extract_speech(self, audio_bytes: bytes) -> bytes | None:
@@ -55,14 +65,15 @@ class VADProcessor:
         if audio_tensor is None:
             return None
 
-        timestamps = get_speech_timestamps(
-            audio_tensor,
-            self.model,
-            sampling_rate=SAMPLE_RATE,
-            min_speech_duration_ms=int(MIN_SPEECH_DURATION * 1000),
-            min_silence_duration_ms=300,
-            return_seconds=False,
-        )
+        with self._lock:
+            timestamps = get_speech_timestamps(
+                audio_tensor,
+                self.model,
+                sampling_rate=SAMPLE_RATE,
+                min_speech_duration_ms=int(MIN_SPEECH_DURATION * 1000),
+                min_silence_duration_ms=300,
+                return_seconds=False,
+            )
 
         if not timestamps:
             return None
