@@ -32,3 +32,6 @@ Thumbs.db
 Notes for Running.txt
 websocket.txt
 Working.txt
+
+# Claude Code local config
+.claude/

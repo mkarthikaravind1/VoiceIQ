@@ -11,14 +11,14 @@ export function CallLog({ entries }) {
 
   if (entries.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-black text-sm">
+      <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
         Call transcript will appear here
       </div>
     )
   }
 
   return (
-    <div className="h-full overflow-y-auto space-y-3 pr-1">
+    <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
       {entries.map((entry, i) => (
         <div key={i} className="space-y-1">
           {/* User transcript */}
@@ -55,7 +55,7 @@ export function CallLog({ entries }) {
           {entry.summary && (
               <div className="mt-1 flex flex-wrap gap-1 text-xs font-mono">
                 {!entry.summary.escalated && (
-                  < span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
+                  <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
                       {entry.summary.resolution}
                   </span>
             )}
@@ -67,7 +67,7 @@ export function CallLog({ entries }) {
             {entry.summary.escalated && (
               <span className="bg-red-50 text-red-500 px-1.5 py-0.5 rounded">escalated</span>
             )}
-            <span className="bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded">
+            <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
               {entry.summary.duration_s}s
             </span>
           </div>

@@ -48,6 +48,9 @@ TAIL_MIN_SPEECH_MS = 150
 router = APIRouter()
 settings = get_settings()
 
+# CORS middleware does not cover WebSockets, so check the browser Origin here.
+_ALLOWED_ORIGINS = {o.strip() for o in settings.cors_origins.split(",") if o.strip()}
+
 _stt = None
 _tts = None
 
@@ -161,6 +164,14 @@ def _start_turn(session: _Session, raw_audio: bytes, stt, tts):
 
 @router.websocket("/ws/voice")
 async def voice_websocket(websocket: WebSocket):
+    # Browsers always send Origin; reject pages from sites we don't serve.
+    # (Non-browser clients such as test scripts send none and are allowed.)
+    origin = websocket.headers.get("origin")
+    if origin and "*" not in _ALLOWED_ORIGINS and origin not in _ALLOWED_ORIGINS:
+        logger.warning("Rejected WebSocket from origin %s", origin)
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
     logger.info("WebSocket client connected")
 

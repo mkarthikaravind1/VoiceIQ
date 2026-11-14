@@ -20,7 +20,7 @@ class FAQRetriever:
         client = chromadb.PersistentClient(path=settings.chroma_persist_dir)
         ef = SentenceTransformerEmbeddingFunction(model_name=settings.embedding_model)
         try:
-            self.collection = client.get_collection(name="faq", embedding_function=cast(Any,ef)) 
+            self.collection = client.get_collection(name="faq", embedding_function=cast(Any, ef))
             print(f"✅ ChromaDB ready ({self.collection.count()} FAQs loaded)")
         except Exception:
             print("⚠️  ChromaDB 'faq' collection not found. Run: python -m app.rag.ingest")
@@ -29,7 +29,8 @@ class FAQRetriever:
     def retrieve(self, query: str) -> str:
         """
         Query ChromaDB for top-K relevant FAQ entries.
-        Returns a formatted context string for the LLM.
+        Returns a formatted context string for the LLM, or "" if nothing is
+        close enough to the question.
         """
         if self.collection is None or self.collection.count() == 0:
             return ""
@@ -39,15 +40,20 @@ class FAQRetriever:
             n_results=min(settings.rag_top_k, self.collection.count()),
         )
 
-        if not results["metadatas"] or results.get("metadatas") is None or not results["metadatas"]:
+        metadatas = results.get("metadatas")
+        if not metadatas or not metadatas[0]:
             return ""
 
-        # Format retrieved entries as readable context
+        distances = results.get("distances")
+
+        # Keep only entries that are actually related to the question, so an
+        # off-topic question gets empty context instead of three random FAQs.
         context_parts = []
-        for i, meta in enumerate(results["metadatas"][0]):
-            distance = results["distances"][0][i] if results.get("distances") else None # type: ignore
-            relevance = f" (relevance: {1 - distance:.2f})" if distance is not None else ""
-            context_parts.append(f"Q: {meta['question']}\nA: {meta['answer']}{relevance}")
+        for i, meta in enumerate(metadatas[0]):
+            distance = distances[0][i] if distances else None
+            if distance is not None and distance > settings.rag_max_distance:
+                continue
+            context_parts.append(f"Q: {meta['question']}\nA: {meta['answer']}")
 
         return "\n\n".join(context_parts)
 

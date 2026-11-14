@@ -50,17 +50,24 @@ class STTPipeline:
         segments, info = self.model.transcribe(
             audio_np,
             beam_size=5,
-            language=None,        # auto-detect language
+            language=settings.whisper_language or None,   # "" → auto-detect
             vad_filter=False,     # we already ran VAD above
             word_timestamps=False,
         )
 
         # Collect all segment texts
-        transcript_parts = [seg.text.strip() for seg in segments]
-        transcript = " ".join(transcript_parts).strip()
+        # Skip segments Whisper itself thinks are not speech (this is where
+        # "Thank you." hallucinations on background noise come from)
+        transcript_parts = [
+            seg.text.strip()
+            for seg in segments
+            if not (seg.no_speech_prob > 0.6 and seg.avg_logprob < -1.0)
+        ]
+        transcript = " ".join(p for p in transcript_parts if p).strip()
 
         # Filter out noise — too short or no real words
-        if len(transcript) < 3 or len(transcript.split()) < 2:
+        # One-word answers like "Yes" or "No" are valid and kept
+        if len(transcript) < 2:
             return {"transcript": "", "language": "en", "confidence": 0.0, "is_speech": False}
 
         # Faster-Whisper gives avg log prob per segment; convert to 0-1 confidence
@@ -80,7 +87,7 @@ class STTPipeline:
         Async wrapper — offloads CPU-heavy transcription to thread pool
         so the FastAPI event loop stays unblocked.
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, self._transcribe_sync, audio_bytes)
         return result
 

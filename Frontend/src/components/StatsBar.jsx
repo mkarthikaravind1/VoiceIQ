@@ -4,7 +4,7 @@ const COLORS = {
   faq:          '#8b5cf6',
   order_lookup: '#60a5fa',
   escalate:     '#fbbf24',
-  unknown:      '#4b5563',
+  unknown:      '#9ca3af',
 }
 
 const LABELS = {
@@ -27,8 +27,10 @@ export function StatsBar({ entries }) {
     color: COLORS[intent] || '#6b7280',
   }))
 
-  const avgLatency = entries.length > 0
-    ? (entries.reduce((s, e) => s + (e.latency || 0), 0) / entries.length / 1000).toFixed(1)
+  // Time from transcript to agent reply, over turns that actually got a reply
+  const timed = entries.filter(e => e.latency != null)
+  const avgLatency = timed.length > 0
+    ? (timed.reduce((s, e) => s + e.latency, 0) / timed.length / 1000).toFixed(1) + 's'
     : '—'
 
   return (
@@ -44,15 +46,15 @@ export function StatsBar({ entries }) {
                   {data.map((d, i) => <Cell key={i} fill={d.color} />)}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ background: '#0f0f1a', border: '1px solid #252545', borderRadius: 6, fontSize: 11 }}
-                  itemStyle={{ color: '#e5e7eb' }}
+                  contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 11 }}
+                  itemStyle={{ color: '#374151' }}
                 />
               </PieChart>
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="w-16 h-16 rounded-full border-2 border-surface-600 flex items-center justify-center">
-            <span className="text-gray-700 text-xs">—</span>
+          <div className="w-16 h-16 rounded-full border-2 border-gray-200 flex items-center justify-center">
+            <span className="text-gray-400 text-xs">—</span>
           </div>
         )}
 
@@ -62,19 +64,19 @@ export function StatsBar({ entries }) {
             <div key={i} className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: d.color }} />
-                <span className="text-gray-400">{d.name}</span>
+                <span className="text-gray-600">{d.name}</span>
               </div>
-              <span className="font-mono text-gray-300">{d.value}</span>
+              <span className="font-mono text-gray-800">{d.value}</span>
             </div>
           ))}
         </div>
 
         {/* Metrics */}
         <div className="text-right shrink-0">
-          <p className="text-2xl font-display font-semibold text-violet-400">{entries.length}</p>
+          <p className="text-2xl font-display font-semibold text-violet-600">{entries.length}</p>
           <p className="text-xs text-gray-600">calls</p>
-          <p className="text-sm font-mono text-gray-300 mt-1">{avgLatency}s</p>
-          <p className="text-xs text-gray-600">avg</p>
+          <p className="text-sm font-mono text-gray-800 mt-1">{avgLatency}</p>
+          <p className="text-xs text-gray-600">avg reply</p>
         </div>
       </div>
     </div>

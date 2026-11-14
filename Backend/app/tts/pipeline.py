@@ -31,7 +31,7 @@ class TTSPipeline:
     def _load_model(self):
         if not MODEL_PATH.exists():
             print(f"⚠️  Piper model not found at {MODEL_PATH}")
-            print("   Run the curl commands in Phase 5 instructions to download it.")
+            print("   Download it with the curl command in the README (Setup, Backend).")
             return
         print(f"🔈 Loading Piper TTS model [{settings.tts_model}]...")
         self.voice = PiperVoice.load(str(MODEL_PATH), config_path=str(CONFIG_PATH))
@@ -86,7 +86,7 @@ class TTSPipeline:
         if not sentences:
             return
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         for sentence in sentences:
             # Run CPU-heavy synthesis in thread pool to not block event loop

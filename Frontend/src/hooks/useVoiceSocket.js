@@ -1,18 +1,41 @@
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useEffect } from 'react'
+import pcmWorkletUrl from '../audio/pcm-worklet.js?url'
 
-const WS_URL = 'ws://localhost:8000/ws/voice'
-const SAMPLE_RATE = 16000
-const BUFFER_SIZE = 4096
+// Same host as the page by default (Vite proxies /ws to the backend in dev);
+// set VITE_WS_URL to point at a backend on another host.
+const WS_URL = import.meta.env.VITE_WS_URL
+  ?? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/voice`
 
-export function useVoiceSocket({ onTranscript, onResponse, onStatus, onError, onAudio, onTtsStart, onTtsEnd, onBargeIn }) {
+export function useVoiceSocket(handlers) {
   const wsRef             = useRef(null)
   const connectPromiseRef = useRef(null)
   const streamRef         = useRef(null)
-  const processorRef      = useRef(null)
+  const nodeRef           = useRef(null)
   const contextRef        = useRef(null)
 
+  // Always call the latest handlers without re-creating the socket callbacks
+  const handlersRef = useRef(handlers)
+  handlersRef.current = handlers
+
   const [connected, setConnected]   = useState(false)
+  const [connecting, setConnecting] = useState(false)
   const [listening, setListening]   = useState(false)
+
+  // Release the microphone and audio graph. Safe to call more than once.
+  const cleanupAudio = useCallback(() => {
+    if (nodeRef.current) {
+      nodeRef.current.port.onmessage = null
+      nodeRef.current.disconnect()
+    }
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    if (contextRef.current && contextRef.current.state !== 'closed') {
+      contextRef.current.close().catch(() => {})
+    }
+    nodeRef.current    = null
+    streamRef.current  = null
+    contextRef.current = null
+    setListening(false)
+  }, [])
 
   // Resolves once the socket is actually open. Calling it again while a
   // connection is open or in progress reuses that one instead of opening another.
@@ -26,16 +49,18 @@ export function useVoiceSocket({ onTranscript, onResponse, onStatus, onError, on
     const ws = new WebSocket(WS_URL)
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
+    setConnecting(true)
 
     const promise = new Promise((resolve, reject) => {
       ws.onopen = () => {
+        setConnecting(false)
         setConnected(true)
         console.log('[WS] Connected')
         resolve()
       }
       ws.onerror = (e) => {
         console.error('[WS] Error', e)
-        onError?.({ message: 'WebSocket connection error' })
+        handlersRef.current.onError?.({ message: 'Cannot reach the server' })
         reject(new Error('WebSocket connection error'))
       }
     })
@@ -43,16 +68,17 @@ export function useVoiceSocket({ onTranscript, onResponse, onStatus, onError, on
     connectPromiseRef.current = promise
 
     ws.onmessage = (event) => {
+      const h = handlersRef.current
       try {
         const msg = JSON.parse(event.data)
-        if (msg.type === 'transcript') onTranscript?.(msg)
-        else if (msg.type === 'response') onResponse?.(msg)
-        else if (msg.type === 'status')   onStatus?.(msg)
-        else if (msg.type === 'error')    onError?.(msg)
-        else if (msg.type === 'audio') onAudio?.(msg)
-        else if (msg.type === 'barge_in')   onBargeIn?.(msg)
-        else if (msg.type === 'tts_start')  onTtsStart?.(msg)
-        else if (msg.type === 'tts_end')    onTtsEnd?.(msg)
+        if (msg.type === 'transcript')      h.onTranscript?.(msg)
+        else if (msg.type === 'response')   h.onResponse?.(msg)
+        else if (msg.type === 'status')     h.onStatus?.(msg)
+        else if (msg.type === 'error')      h.onError?.(msg)
+        else if (msg.type === 'audio')      h.onAudio?.(msg)
+        else if (msg.type === 'barge_in')   h.onBargeIn?.(msg)
+        else if (msg.type === 'tts_start')  h.onTtsStart?.(msg)
+        else if (msg.type === 'tts_end')    h.onTtsEnd?.(msg)
       } catch (e) {
         console.error('[WS] Parse error', e)
       }
@@ -64,12 +90,14 @@ export function useVoiceSocket({ onTranscript, onResponse, onStatus, onError, on
       if (wsRef.current !== ws) return
       wsRef.current = null
       connectPromiseRef.current = null
+      setConnecting(false)
       setConnected(false)
-      setListening(false)
+      cleanupAudio()   // server went away — don't leave the mic running
+      handlersRef.current.onClose?.()
     }
 
     return promise
-  }, [onTranscript, onResponse, onStatus, onError, onAudio, onTtsStart, onTtsEnd, onBargeIn])
+  }, [cleanupAudio])
 
   const startListening = useCallback(async () => {
     try {
@@ -77,6 +105,8 @@ export function useVoiceSocket({ onTranscript, onResponse, onStatus, onError, on
     } catch {
       return   // onError already reported it
     }
+
+    cleanupAudio()   // never stack a second mic graph on top of an old one
 
     try {
       // Echo cancellation keeps the agent's own voice (from the speakers)
@@ -86,54 +116,53 @@ export function useVoiceSocket({ onTranscript, onResponse, onStatus, onError, on
       })
       streamRef.current = stream
 
-      const ctx = new AudioContext({ sampleRate: SAMPLE_RATE })
+      // Device-rate context (works in every browser); the worklet downsamples to 16 kHz.
+      const ctx = new AudioContext()
       contextRef.current = ctx
+      await ctx.audioWorklet.addModule(pcmWorkletUrl)
 
-      const source    = ctx.createMediaStreamSource(stream)
-      const processor = ctx.createScriptProcessor(BUFFER_SIZE, 1, 1)
-      processorRef.current = processor
+      const source = ctx.createMediaStreamSource(stream)
+      const node   = new AudioWorkletNode(ctx, 'pcm-processor')
+      nodeRef.current = node
 
-      processor.onaudioprocess = (e) => {
-        if (wsRef.current?.readyState !== WebSocket.OPEN) return
-        const float32 = e.inputBuffer.getChannelData(0)
-        // Convert float32 → int16 PCM
-        const int16 = new Int16Array(float32.length)
-        for (let i = 0; i < float32.length; i++) {
-          int16[i] = Math.max(-32768, Math.min(32767, float32[i] * 32768))
-        }
-        wsRef.current.send(int16.buffer)
+      node.port.onmessage = (e) => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(e.data)
       }
 
-      source.connect(processor)
-      processor.connect(ctx.destination)
+      // Route through a muted gain so the graph is pulled without echoing the mic
+      const mute = ctx.createGain()
+      mute.gain.value = 0
+      source.connect(node)
+      node.connect(mute)
+      mute.connect(ctx.destination)
 
       setListening(true)
     } catch (err) {
-      onError?.({ message: `Mic error: ${err.message}` })
+      cleanupAudio()
+      handlersRef.current.onError?.({ message: `Mic error: ${err.message}` })
     }
-  }, [connect, onError])
+  }, [connect, cleanupAudio])
 
   const stopListening = useCallback(() => {
-    processorRef.current?.disconnect()
-    streamRef.current?.getTracks().forEach(t => t.stop())
-    contextRef.current?.close()
-    processorRef.current = null
-    streamRef.current    = null
-    contextRef.current   = null
-
+    cleanupAudio()
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: 'end_session' }))
     }
-    setListening(false)
-  }, [])
+  }, [cleanupAudio])
 
   const disconnect = useCallback(() => {
-    stopListening()
-    wsRef.current?.close()
+    cleanupAudio()
+    const ws = wsRef.current
     wsRef.current = null
     connectPromiseRef.current = null
+    if (ws) {
+      // Detach first so an intentional close isn't reported as an error
+      ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null
+      ws.close()
+    }
+    setConnecting(false)
     setConnected(false)
-  }, [stopListening])
+  }, [cleanupAudio])
 
   const sendControl = useCallback((msg) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -141,5 +170,11 @@ export function useVoiceSocket({ onTranscript, onResponse, onStatus, onError, on
     }
   }, [])
 
-  return { connected, listening, connect, disconnect, startListening, stopListening, sendControl }
+  // Connect when the page opens; release mic + socket when it goes away
+  useEffect(() => {
+    connect().catch(() => {})
+    return disconnect
+  }, [connect, disconnect])
+
+  return { connected, connecting, listening, connect, disconnect, startListening, stopListening, sendControl }
 }

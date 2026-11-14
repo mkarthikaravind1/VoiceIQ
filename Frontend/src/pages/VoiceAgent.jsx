@@ -19,9 +19,10 @@ function MicButton({ listening, onClick, disabled }) {
       <button
         onClick={onClick}
         disabled={disabled}
+        aria-label={listening ? 'Stop listening' : 'Start listening'}
         className={`
           relative z-10 w-24 h-24 rounded-full flex items-center justify-center
-          transition-all duration-300 focus:outline-none
+          transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500
           ${listening
             ? 'bg-violet-600 shadow-violet-glow-lg scale-105'
           : 'bg-gray-100 hover:bg-gray-200 border border-gray-300'
@@ -31,12 +32,12 @@ function MicButton({ listening, onClick, disabled }) {
       >
         {listening ? (
           // Stop icon
-          <svg className="w-8 h-8 text-gray-200" fill="currentColor" viewBox="0 0 24 24">
+          <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
             <rect x="6" y="6" width="12" height="12" rx="2" />
           </svg>
         ) : (
           // Mic icon
-          <svg className="w-8 h-8 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+          <svg className="w-8 h-8 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
             <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 1 0 4 0V5a2 2 0 0 0-2-2zm-7 8a1 1 0 0 1 1 1 6 6 0 1 0 12 0 1 1 0 0 1 2 0 8 8 0 0 1-7 7.938V21h2a1 1 0 0 1 0 2H9a1 1 0 0 1 0-2h2v-2.062A8 8 0 0 1 4 12a1 1 0 0 1 1-1z" />
           </svg>
         )}
@@ -46,16 +47,28 @@ function MicButton({ listening, onClick, disabled }) {
 }
 
 // ── Status Pill ───────────────────────────────────────────────────────────────
-function StatusPill({ status, listening, connected }) {
-  const label = listening ? 'Listening...'
+// An error always wins, so it is never hidden behind "Listening..." or "Connecting...".
+function StatusPill({ status, error, listening, connected, connecting }) {
+  const label = error ? `Error: ${error}`
+    : listening ? 'Listening...'
     : connected ? (status || 'Connected — tap to speak')
-    : 'Connecting...' 
+    : connecting ? 'Connecting...'
+    : 'Offline — tap the mic to reconnect'
 
-  const color = listening ? 'text-violet-400' : connected ? 'text-gray-400' : 'text-gray-600'
+  const color = error ? 'text-red-600'
+    : listening ? 'text-violet-500'
+    : connected ? 'text-gray-500'
+    : 'text-gray-500'
+
+  const dot = error ? 'bg-red-500'
+    : listening ? 'bg-violet-500 animate-pulse'
+    : connected ? 'bg-emerald-500'
+    : connecting ? 'bg-amber-400 animate-pulse'
+    : 'bg-gray-400'
 
   return (
-    <div className={`flex items-center gap-2 text-sm ${color} font-mono`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${listening ? 'bg-violet-400 animate-pulse' : connected ? 'bg-emerald-500' : 'bg-gray-600'}`} />
+    <div className={`flex items-center gap-2 text-sm ${color} font-mono`} role="status">
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
       {label}
     </div>
   )
@@ -65,6 +78,8 @@ function StatusPill({ status, listening, connected }) {
 export default function VoiceAgent() {
   const [entries,       setEntries]       = useState([])
   const [status,        setStatus]        = useState('')
+  const [error,         setError]         = useState(null)
+  const [escalated,     setEscalated]     = useState(false)
   const [pendingEntry,  setPendingEntry]  = useState(null)
   const startTimeRef = useRef(null)
   const pendingEntryRef = useRef(null)
@@ -75,21 +90,27 @@ export default function VoiceAgent() {
 
   const isStale = (msg) => msg.turn_id != null && msg.turn_id <= ignoreUpToRef.current
 
+  const clearPending = () => {
+    pendingEntryRef.current = null
+    setPendingEntry(null)
+  }
+
   // Server heard the user start speaking (barge-in): stop the agent's voice now.
   const onBargeIn = useCallback((msg) => {
     stopPlayback()
+    setError(null)
     if (msg.turn_id != null) ignoreUpToRef.current = msg.turn_id
     // Interrupted before the agent answered — keep what the user said in the log
     const pending = pendingEntryRef.current
     if (pending) {
-      setEntries(prev => [...prev, { transcript: pending.transcript, response: '', latency: 0, ts: Date.now() }])
-      pendingEntryRef.current = null
-      setPendingEntry(null)
+      setEntries(prev => [...prev, { transcript: pending.transcript, response: '', ts: Date.now() }])
+      clearPending()
     }
   }, [stopPlayback])
 
   const onTranscript = useCallback((msg) => {
     if (isStale(msg)) return
+    setError(null)
     startTimeRef.current = Date.now()
     pendingEntryRef.current = { transcript: msg.text, language: msg.language }
     setPendingEntry({ transcript: msg.text, language: msg.language })
@@ -97,81 +118,69 @@ export default function VoiceAgent() {
 
   const onResponse = useCallback((msg) => {
     if (isStale(msg)) return
-    const latency = startTimeRef.current ? Date.now() - startTimeRef.current : 0
+    const latency = startTimeRef.current ? Date.now() - startTimeRef.current : null
     setEntries(prev => [...prev, {
       transcript: pendingEntryRef.current?.transcript || '',
       response: msg.text,
       intent: msg.intent,
       confidence: msg.confidence,
       latency,
-      summary: msg.summary, 
-      sentiment: msg.sentiment_score, 
+      summary: msg.summary,
+      sentiment: msg.sentiment_score,
       ts: Date.now(),
     }])
-    pendingEntryRef.current = null
-    setPendingEntry(null)
-  }, []) 
-
-  // Original Claude given code
-  // const onTranscript = useCallback((msg) => {
-  //   startTimeRef.current = Date.now()
-  //   setPendingEntry({ transcript: msg.text, language: msg.language })
-  // }, [])
-
-  // const onResponse = useCallback((msg) => {
-  //   const latency = startTimeRef.current ? Date.now() - startTimeRef.current : 0
-  //   setEntries(prev => [...prev, {
-  //     transcript: pendingEntry?.transcript || '',
-  //     response:   msg.text,
-  //     intent:     msg.intent,
-  //     confidence: msg.confidence,
-  //     latency,
-  //     ts: Date.now(),
-  //   }])
-  //   setPendingEntry(null)
-  // }, [pendingEntry])
+    if (msg.should_escalate) setEscalated(true)
+    clearPending()
+  }, [])
 
   const onStatus = useCallback((msg) => setStatus(msg.message), [])
   const onError  = useCallback((msg) => {
-    setStatus(`Error: ${msg.message}`)
+    setError(msg.message)
     // A failed turn never sends a response — don't leave "Processing..." stuck
-    pendingEntryRef.current = null
-    setPendingEntry(null)
+    clearPending()
   }, [])
+  const onClose = useCallback(() => {
+    stopPlayback()
+    clearPending()
+  }, [stopPlayback])
   const onAudio = useCallback((msg) => {
     if (!isStale(msg)) playChunk(msg.data)
   }, [playChunk])
 
-  const { connected, listening, startListening, stopListening } =
-    useVoiceSocket({ onTranscript, onResponse, onStatus, onError, onAudio, onBargeIn })
+  const { connected, connecting, listening, startListening, stopListening } =
+    useVoiceSocket({ onTranscript, onResponse, onStatus, onError, onAudio, onBargeIn, onClose })
 
   const handleMicClick = async () => {
+    setError(null)
     if (listening) stopListening()
     else await startListening()
   }
 
-  const handleClear = () => setEntries([])
+  const handleClear = () => {
+    setEntries([])
+    setEscalated(false)
+  }
 
   return (
     <div className="h-screen overflow-hidden bg-white flex flex-col">
       {/* Header */}
       <header className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3"> 
+        <div className="flex items-center gap-3">
           <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center">
             <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-7 10a1 1 0 0 1 1 1 6 6 0 1 0 12 0 1 1 0 0 1 2 0 8 8 0 0 1-7 7.938V21h2a1 1 0 0 1 0 2H9a1 1 0 0 1 0-2h2v-2.062A8 8 0 0 1 4 12a1 1 0 0 1 1-1z" />
             </svg>
           </div>
           <span className="font-display font-semibold text-lg tracking-tight">VoiceIQ</span>
-          <span className="text-xs text-gray-600 font-mono">v1.0</span>
+          <span className="text-xs text-gray-500 font-mono">v1.0</span>
         </div>
         <div className="flex items-center gap-3">
           {entries.length > 0 && (
-            <button onClick={handleClear} className="text-xs text-gray-600 hover:text-gray-400 transition-colors">
+            <button onClick={handleClear} className="text-xs text-gray-600 hover:text-gray-900 transition-colors">
               Clear log
             </button>
           )}
-          <a href="/docs" target="_blank" className="text-xs text-gray-600 hover:text-violet-400 transition-colors font-mono">
+          <a href="/docs" target="_blank" rel="noreferrer" className="text-xs text-gray-600 hover:text-violet-600 transition-colors font-mono">
             API docs ↗
           </a>
         </div>
@@ -192,13 +201,29 @@ export default function VoiceAgent() {
             </p>
           </div>
 
+          {/* Escalation alert */}
+          {escalated && (
+            <div className="max-w-sm w-full bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 flex items-start gap-3" role="alert">
+              <span className="mt-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-amber-900">Escalated to a human agent</p>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  This call has been flagged for handoff. A support agent will take over from here.
+                </p>
+              </div>
+              <button onClick={() => setEscalated(false)} className="text-xs text-amber-800 hover:text-amber-950">
+                Dismiss
+              </button>
+            </div>
+          )}
+
           <MicButton
             listening={listening}
             onClick={handleMicClick}
             disabled={false}
           />
 
-          <StatusPill status={status} listening={listening} connected={connected} />
+          <StatusPill status={status} error={error} listening={listening} connected={connected} connecting={connecting} />
 
           {/* Pending transcript */}
           {pendingEntry && (
@@ -224,7 +249,7 @@ export default function VoiceAgent() {
                 'Check my order ID 1002',
                 'How long does shipping take?',
               ].map((q, i) => (
-                <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-400 text-center">
+                <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-600 text-center">
                   "{q}"
                 </div>
               ))}
@@ -239,7 +264,7 @@ export default function VoiceAgent() {
             <span className="text-xs font-mono text-black">{entries.length} calls</span>
           </div>
 
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 flex flex-col">
             <CallLog entries={entries} />
           </div>
 
